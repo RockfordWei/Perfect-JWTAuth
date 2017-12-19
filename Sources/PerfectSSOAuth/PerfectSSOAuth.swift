@@ -12,6 +12,7 @@ public struct UserRecord: Codable {
 public protocol UserDatabase {
   func save(user: UserRecord) throws
   func load(username: String) throws -> UserRecord
+  func drop(username: String) throws 
 }
 
 extension Int {
