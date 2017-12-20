@@ -52,6 +52,25 @@ This package builds with Swift Package Manager and is part of the [Perfect](http
 - extremely fast, scalable and thread-safe
 - Session free: a full application of JWT for the single sign-on authentication to any virtual private clouds.
 
+## SPM Configuration Note
+
+This library is configurable by environmental variables when building with Swift Package Manager. See description below for the settings.
+
+### Database Driver Specification
+
+use `DATABASE_DRIVER` for database driver speficifcations. If null, the library will build with all compatible databases.
+
+For example,
+- `export DATABASE_DRIVER=SQLite` will apply a `PerfectSQLite` driver if `swift build`
+- `export DATABASE_DRIVER=JSONFile` will apply a native JSON file based user database when `swift build`
+
+### Local Mirror
+
+This library is using `URL_PERFECT` to work with [Perfect Local Mirror](https://github.com/PerfectlySoft/Perfect-LocalMirror) to speed up building process.
+
+For example, `export URL_PERFECT=/private/var/perfect` will help build if install the Perfect Local Mirror by default.
+
+
 ## Status
 
 Experimental
