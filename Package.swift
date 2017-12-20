@@ -16,7 +16,7 @@ let package = Package(
     products: [
         .library(
             name: "PerfectSSOAuth",
-            targets: ["PerfectSSOAuth"]),
+            targets: ["PerfectSSOAuth", "UDBJSONFile"]),
     ],
     dependencies: [
         .package(url: url, from: "3.0.0"),
@@ -25,8 +25,11 @@ let package = Package(
         .target(
             name: "PerfectSSOAuth",
             dependencies: ["PerfectCrypto"]),
+        .target(
+            name: "UDBJSONFile",
+            dependencies: ["PerfectSSOAuth"]),
         .testTarget(
             name: "PerfectSSOAuthTests",
-            dependencies: ["PerfectSSOAuth"]),
+            dependencies: ["PerfectSSOAuth", "UDBJSONFile"]),
     ]
 )
