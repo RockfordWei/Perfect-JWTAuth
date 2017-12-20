@@ -60,9 +60,17 @@ This library is configurable by environmental variables when building with Swift
 
 use `DATABASE_DRIVER` for database driver speficifcations. If null, the library will build with all compatible databases.
 
-For example,
-- `export DATABASE_DRIVER=SQLite` will apply a `PerfectSQLite` driver if `swift build`
-- `export DATABASE_DRIVER=JSONFile` will apply a native JSON file based user database when `swift build`
+For example,  `export DATABASE_DRIVER=SQLite` will apply a `PerfectSQLite` driver if `swift build`
+
+Currently configurable database drivers are:
+
+Driver Name| Description
+------------|--------------
+SQLite|Perfect SQLite
+JSONFile|a native JSON file based user database
+MySQL|Perfect MySQL
+-------|-------
+
 
 ### Local Mirror
 

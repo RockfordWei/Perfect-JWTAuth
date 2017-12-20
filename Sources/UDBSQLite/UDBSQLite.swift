@@ -26,11 +26,11 @@ public class UDBSQLite: UserDatabase {
     let count = (try? lock.doWithLock {
       var count = 0
       try self.db.forEachRow(statement:
-        "SELECT COUNT(name) FROM users WHERE name = ?",
+        "SELECT name FROM users WHERE name = ?",
                              doBindings: { stmt in
                               try stmt.bind(position: 1, username)
-      }) { rec, i in
-        count = rec.columnInt(position: 0)
+      }) { _, _ in
+        count += 1
         }
         return count
       }) ?? 0
@@ -76,7 +76,7 @@ public class UDBSQLite: UserDatabase {
       throw Exception.UserNotExists
     }
     try lock.doWithLock {
-      try db.execute(statement: "DELETE users WHERE name = ?"){
+      try db.execute(statement: "DELETE FROM users WHERE name = ?"){
         stmt in
         try stmt.bind(position: 1, username)
       }

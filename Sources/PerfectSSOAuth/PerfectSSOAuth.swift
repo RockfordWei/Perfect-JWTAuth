@@ -31,6 +31,7 @@ extension Int {
 public class AccessManager {
 
   public enum Exception: Error {
+    case Reasonable(String)
     case OperationFailure
     case CryptoFailure
     case UserExists
@@ -40,6 +41,7 @@ public class AccessManager {
     case TokenFailure
     case InvalidToken
     case Unsupported
+    case DatabaseConnectionFailure
   }
   internal let _cipher: Cipher
   internal let _keyIterations: Int
