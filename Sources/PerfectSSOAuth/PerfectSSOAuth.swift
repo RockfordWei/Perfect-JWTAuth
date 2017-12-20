@@ -3,9 +3,14 @@ import PerfectCrypto
 import Foundation
 
 public struct UserRecord: Codable {
-  public var username = ""
+  public var name = ""
   public var salt = ""
   public var shadow = ""
+  public init(name: String, salt: String, shadow: String) {
+    self.name = name
+    self.salt = salt
+    self.shadow = shadow
+  }
 }
 
 /// *NOTE* All implementation of UDB must be:
@@ -34,6 +39,7 @@ public class AccessManager {
     case LoginFailure
     case TokenFailure
     case InvalidToken
+    case Unsupported
   }
   internal let _cipher: Cipher
   internal let _keyIterations: Int
@@ -75,7 +81,7 @@ public class AccessManager {
       else {
         throw Exception.CryptoFailure
     }
-    let u = UserRecord(username: usr, salt: salt, shadow: shadow)
+    let u = UserRecord(name: usr, salt: salt, shadow: shadow)
     try _udb.insert(user: u)
   }
 
@@ -92,13 +98,13 @@ public class AccessManager {
       else {
         throw Exception.CryptoFailure
     }
-    let u = UserRecord(username: usr, salt: salt, shadow: shadow)
+    let u = UserRecord(name: usr, salt: salt, shadow: shadow)
     try _udb.update(user: u)
   }
 
   /// login to generate a valid jwt token
   public func login(username: String, password: String,
-                     subject: String = "", sessionTime: Int = 3600,
+                     subject: String = "", timeout: Int = 3600,
                      headers: [String:Any] = [:]) throws -> String {
     let usr = username.stringByEncodingURL
     let pwd = password.stringByEncodingURL
@@ -115,7 +121,7 @@ public class AccessManager {
       throw Exception.LoginFailure
     }
     let now = time(nil)
-    let expiration = now + sessionTime
+    let expiration = now + timeout
     let claims:[String: Any] = [
         "iss":_managerID, "sub": subject, "aud": username,
         "exp": expiration, "nbf": now, "iat": now, "jit": UUID().string

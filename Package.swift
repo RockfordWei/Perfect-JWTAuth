@@ -1,35 +1,20 @@
-// swift-tools-version:4.0
-// The swift-tools-version declares the minimum version of Swift required to build this package.
-
 import PackageDescription
 import Foundation
 
-let repo = "Perfect-Crypto"
-let url: String
+let repos = ["Perfect-Crypto", "Perfect-SQLite"]
+let urls: [String]
 if let cache = getenv("URL_PERFECT"), let local = String(validatingUTF8: cache) {
-  url = "\(local)/\(repo)/.git"
+  urls = repos.map {"\(local)/\($0)" }
 } else {
-  url = "https://github.com/PerfectlySoft/\(repo).git"
+  urls = repos.map { "https://github.com/PerfectlySoft/\($0).git" }
 }
 let package = Package(
     name: "PerfectSSOAuth",
-    products: [
-        .library(
-            name: "PerfectSSOAuth",
-            targets: ["PerfectSSOAuth", "UDBJSONFile"]),
-    ],
-    dependencies: [
-        .package(url: url, from: "3.0.0"),
-    ],
     targets: [
-        .target(
-            name: "PerfectSSOAuth",
-            dependencies: ["PerfectCrypto"]),
-        .target(
-            name: "UDBJSONFile",
-            dependencies: ["PerfectSSOAuth"]),
-        .testTarget(
-            name: "PerfectSSOAuthTests",
-            dependencies: ["PerfectSSOAuth", "UDBJSONFile"]),
-    ]
+      Target(name: "PerfectSSOAuth", dependencies: []),
+      Target(name: "UDBJSONFile", dependencies: ["PerfectSSOAuth"]),
+      Target(name: "UDBSQLite", dependencies: ["PerfectSSOAuth"]),
+      Target(name: "PerfectSSOAuthTests", dependencies: ["PerfectSSOAuth", "UDBJSONFile", "UDBSQLite"])
+    ],
+    dependencies: urls.map { .Package(url: $0, majorVersion: 3) }
 )

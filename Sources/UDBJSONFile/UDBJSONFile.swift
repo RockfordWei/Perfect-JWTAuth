@@ -21,10 +21,10 @@ public class UDBJSONFile: UserDatabase {
   public func insert(user: UserRecord) throws {
     let data = try encoder.encode(user)
     try lock.doWithLock {
-      if 0 == access(path(of: user.username), 0) {
+      if 0 == access(path(of: user.name), 0) {
         throw Exception.UserExists
       }
-      try data.write(to: self.url(of: user.username))
+      try data.write(to: self.url(of: user.name))
     }
   }
 
@@ -41,10 +41,10 @@ public class UDBJSONFile: UserDatabase {
   public func update(user: UserRecord) throws {
     let data = try encoder.encode(user)
     try lock.doWithLock {
-      guard 0 == access(path(of: user.username), 0) else {
+      guard 0 == access(path(of: user.name), 0) else {
         throw Exception.UserNotExists
       }
-      try data.write(to: url(of: user.username))
+      try data.write(to: url(of: user.name))
     }
   }
 
