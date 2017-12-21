@@ -77,45 +77,45 @@ class PerfectSSOAuthTests: XCTestCase {
 */
   }
   func testSQLite() {
-    /*
     do {
-      let udb = try UDBSQLite(path: sqlite)
-      let acm = AccessManager(udb: udb)
-      try acm.register(username: username, password: godpass)
-      _ = try acm.login(username: username, password: godpass)
+      let udb = try UDBSQLite<Profile>(path: sqlite, table: "users", sample: profile)
+      let acm = AccessManager<Profile>(udb: udb)
+      try acm.register(id: username, password: godpass, profile: profile)
+      _ = try acm.login(id: username, password: godpass)
+      let rocky = try acm.load(id: username)
+      print(rocky.profile)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
-      let udb = try UDBSQLite(path: sqlite)
-      let acm = AccessManager(udb: udb)
-      _ = try acm.login(username: username, password: badpass)
-    } catch AccessManager.Exception.CryptoFailure {
-      print("wrong password tested")
+      let udb = try UDBSQLite<Profile>(path: sqlite, table: "users", sample: profile)
+      let acm = AccessManager<Profile>(udb: udb)
+      _ = try acm.login(id: username, password: badpass)
+    } catch Exception.Fault(let reason) {
+      print(reason)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
-      let udb = try UDBSQLite(path: sqlite)
-      let acm = AccessManager(udb: udb)
-      let token = try acm.login(username: username, password: godpass)
+      let udb = try UDBSQLite<Profile>(path: sqlite, table: "users", sample: profile)
+      let acm = AccessManager<Profile>(udb: udb)
+      let token = try acm.login(id: username, password: godpass)
       print(token)
       sleep(3)
       print("wait for verification")
-      try acm.verify(username: username, token: token)
+      try acm.verify(id: username, token: token)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
-      let udb = try UDBSQLite(path: sqlite)
-      let acm = AccessManager(udb: udb)
-      try acm.update(username: username, password: badpass)
-      _ = try acm.login(username: username, password: badpass)
-      try acm.drop(username: username)
+      let udb = try UDBSQLite<Profile>(path: sqlite, table: "users", sample: profile)
+      let acm = AccessManager<Profile>(udb: udb)
+      try acm.update(id: username, password: badpass, profile: profile)
+      _ = try acm.login(id: username, password: badpass)
+      try acm.drop(id: username)
     } catch {
       print("user deleted")
     }
- */
   }
   func testJSONDir() {
     do {

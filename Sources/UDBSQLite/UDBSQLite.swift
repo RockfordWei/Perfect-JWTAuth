@@ -5,7 +5,7 @@ import Foundation
 
 typealias Exception = PerfectSSOAuth.Exception
 
-public class UDBSQLite<Profile> {
+public class UDBSQLite<Profile>: UserDatabase {
   internal let lock: Threading.Lock
   internal let db: SQLite
   internal let table: String
@@ -51,11 +51,12 @@ public class UDBSQLite<Profile> {
     }
     let description:[String] = fields.map { "\($0.name) \($0.type)" }
     let fieldDescription = description.joined(separator: ",")
-    try db.execute(statement: """
-CREATE TABLE IF NOT EXISTS users(
-  id TEXT PRIMARY KEY NOT NULL,
-  salt TEXT, shadow TEXT, \(fieldDescription))
-""")
+    let sql = """
+    CREATE TABLE IF NOT EXISTS users(
+    id TEXT PRIMARY KEY NOT NULL,
+    salt TEXT, shadow TEXT, \(fieldDescription))
+    """
+    try db.execute(statement: sql)
   }
 
   deinit {
@@ -90,11 +91,11 @@ CREATE TABLE IF NOT EXISTS users(
     try lock.doWithLock {
       let properties:[String] = fields.map { $0.name }
       let columns = ["id", "salt", "shadow"] + properties
-      let qmarks:[String] = Array.init(repeating: ",", count: columns.count)
+      let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
       let col = columns.joined(separator: ",")
       let que = qmarks.joined(separator: ",")
-
-      try db.execute(statement: "INSERT INTO \(table)(\(col)) VALUES(\(que))"){
+      let sql = "INSERT INTO \(table)(\(col)) VALUES(\(que))"
+      try db.execute(statement: sql){
         stmt in
         try stmt.bind(position: 1, record.id)
         try stmt.bind(position: 2, record.salt)
@@ -111,7 +112,7 @@ CREATE TABLE IF NOT EXISTS users(
             let s = dic[f.name] as? Double ?? 0
             try stmt.bind(position: j, s)
             break
-          case "INT":
+          case "INTEGER":
             let s = dic[f.name] as? Int ?? 0
             try stmt.bind(position: j, s)
             break
@@ -143,7 +144,7 @@ CREATE TABLE IF NOT EXISTS users(
           case "TEXT":
             dic[fname] = rec.columnText(position: j)
             break
-          case "INT":
+          case "INTEGER":
             dic[fname] = rec.columnInt(position: j)
           case "REAL":
             dic[fname] = rec.columnDouble(position: j)
@@ -161,51 +162,60 @@ CREATE TABLE IF NOT EXISTS users(
       }
       return v
     }
-
   }
-}
-/*
-public class UDBSQLite: UserDatabase {
 
-
-  public func update(user: UserRecord) throws {
-    guard exists(username: user.name) else {
-      throw Exception.UserNotExists
+  public func delete(_ id: String) throws {
+    guard exists(id) else {
+      throw Exception.Fault("user does not exists")
     }
     try lock.doWithLock {
-      try db.execute(statement: "UPDATE users SET salt = ?, shadow = ? WHERE name = ?"){
+      try db.execute(statement: "DELETE FROM \(table) WHERE id = ?"){
         stmt in
-        try stmt.bind(position: 3, user.name)
-        try stmt.bind(position: 1, user.salt)
-        try stmt.bind(position: 2, user.shadow)
+        try stmt.bind(position: 1, id)
       }
     }
   }
 
-  public func delete(username: String) throws {
-    guard exists(username: username) else {
-      throw Exception.UserNotExists
+  public func update<Profile>(_ record: UserRecord<Profile>) throws {
+    guard exists(record.id) else {
+      throw Exception.Fault("user does not exists")
+    }
+    let data = try encoder.encode(record.profile)
+    let bytes:[UInt8] = data.map { $0 }
+    guard let json = String(validatingUTF8:bytes),
+      let dic = try json.jsonDecode() as? [String: Any] else {
+        throw Exception.Fault("json encoding failure")
     }
     try lock.doWithLock {
-      try db.execute(statement: "DELETE FROM users WHERE name = ?"){
+      let columns:[String] = fields.map { "\($0.name) = ?" }
+      let sentence = columns.joined(separator: ",")
+      try db.execute(statement: "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"){
         stmt in
-        try stmt.bind(position: 1, username)
+        try stmt.bind(position: 3, record.id)
+        try stmt.bind(position: 1, record.salt)
+        try stmt.bind(position: 2, record.shadow)
+        for i in 0 ..< fields.count {
+          let f = fields[i]
+          let j = i + 4
+          switch f.type {
+          case "TEXT":
+            let s = dic[f.name] as? String ?? ""
+            try stmt.bind(position: j, s)
+            break
+          case "REAL":
+            let s = dic[f.name] as? Double ?? 0
+            try stmt.bind(position: j, s)
+            break
+          case "INTEGER":
+            let s = dic[f.name] as? Int ?? 0
+            try stmt.bind(position: j, s)
+            break
+          default:
+            throw Exception.Fault("incompatible value type")
+          }
+        }
       }
     }
   }
-
-  public init(path: String) throws {
-    lock = Threading.Lock()
-    db = try SQLite(path)
-    try db.execute(statement: """
-CREATE TABLE IF NOT EXISTS users(
-  name TEXT PRIMARY KEY NOT NULL,
-  salt TEXT, shadow TEXT)
-""")
-  }
-
-  deinit {
-    db.close()
-  }
 }
-*/
+
