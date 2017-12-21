@@ -2,14 +2,14 @@ import Foundation
 import PerfectThread
 import PerfectSSOAuth
 
-public class UDBJSONFile: UserDatabase {
+typealias Exception = PerfectSSOAuth.Exception
+
+public class UDBJSONFile<Profile>: UserDatabase {
 
   internal let folder: String
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
   internal let lock: Threading.Lock
-
-  typealias Exception = AccessManager.Exception
 
   internal func path(of: String) -> String {
     return "\(folder)/\(of).json"
@@ -18,40 +18,40 @@ public class UDBJSONFile: UserDatabase {
     return URL(fileURLWithPath: path(of: of))
   }
 
-  public func insert(user: UserRecord) throws {
-    let data = try encoder.encode(user)
+  public func insert<Profile>(_ record: UserRecord<Profile>) throws {
+    let data = try encoder.encode(record)
     try lock.doWithLock {
-      if 0 == access(path(of: user.name), 0) {
-        throw Exception.UserExists
+      if 0 == access(path(of: record.id), 0) {
+        throw Exception.Fault("record has already registered")
       }
-      try data.write(to: self.url(of: user.name))
+      try data.write(to: self.url(of: record.id))
     }
   }
 
-  public func select(username: String) throws -> UserRecord {
+  public func select<Profile>(_ id: String) throws -> UserRecord<Profile> {
     let data: Data = try lock.doWithLock {
-      guard 0 == access(path(of: username), 0) else {
-        throw Exception.UserNotExists
+      guard 0 == access(path(of: id), 0) else {
+        throw Exception.Fault("record does not exist")
       }
-      return try Data(contentsOf: url(of: username))
+      return try Data(contentsOf: url(of: id))
     }
     return try decoder.decode(UserRecord.self, from: data)
   }
 
-  public func update(user: UserRecord) throws {
-    let data = try encoder.encode(user)
+  public func update<Profile>(_ record: UserRecord<Profile>) throws {
+    let data = try encoder.encode(record)
     try lock.doWithLock {
-      guard 0 == access(path(of: user.name), 0) else {
-        throw Exception.UserNotExists
+      guard 0 == access(path(of: record.id), 0) else {
+        throw Exception.Fault("record does not exist")
       }
-      try data.write(to: url(of: user.name))
+      try data.write(to: url(of: record.id))
     }
   }
 
-  public func delete(username: String) throws {
+  public func delete(_ id: String) throws {
     try lock.doWithLock {
-      guard 0 == unlink(path(of: username)) else {
-        throw Exception.OperationFailure
+      guard 0 == unlink(path(of: id)) else {
+        throw Exception.Fault("operation failure")
       }
     }
   }
@@ -62,7 +62,7 @@ public class UDBJSONFile: UserDatabase {
       closedir(dir)
     } else if autocreation {
       guard 0 == mkdir(directory, mode_t(permission)) else {
-        throw Exception.OperationFailure
+        throw Exception.Fault("operation failure")
       }
     }
     folder = directory

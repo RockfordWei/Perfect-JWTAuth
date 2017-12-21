@@ -2,14 +2,45 @@ import PerfectLib
 import PerfectCrypto
 import Foundation
 
-public struct UserRecord: Codable {
-  public var name = ""
+public enum Exception: Error {
+  case Fault(String)
+}
+
+public struct UserRecord<Profile>: Codable where Profile: Codable {
+  public var id = ""
   public var salt = ""
   public var shadow = ""
-  public init(name: String, salt: String, shadow: String) {
-    self.name = name
+  public var profile: Profile
+  public init(id: String, salt: String, shadow: String, profile: Profile) {
+    self.id = id
     self.salt = salt
     self.shadow = shadow
+    self.profile = profile
+  }
+}
+
+public final class DataworkUtility {
+
+  public struct Property {
+    public var fieldName = ""
+    public var typeName = ""
+    public var value: Any
+  }
+  public static let encoder = JSONEncoder()
+  public static func explainProperties<Profile: Codable>(of: Profile) throws -> [Property] {
+    let data = try encoder.encode(of)
+    guard let json = String.init(bytes: data, encoding: .utf8),
+      let payload = try json.jsonDecode() as? [String:Any]
+      else {
+        throw Exception.Fault("json decoding failure")
+    }
+    var result:[Property] = []
+    for (key, value) in payload {
+      let typeName = type(of: value)
+      let s = Property(fieldName: key, typeName: "\(typeName)", value: value)
+      result.append(s)
+    }
+    return result
   }
 }
 
@@ -17,10 +48,10 @@ public struct UserRecord: Codable {
 /// 1. Thread Safe
 /// 2. Yield error when inserting to an existing record
 public protocol UserDatabase {
-  func insert(user: UserRecord) throws
-  func select(username: String) throws -> UserRecord
-  func update(user: UserRecord) throws
-  func delete(username: String) throws
+  func insert<Profile>(_ record: UserRecord<Profile>) throws
+  func select<Profile>(_ id: String) throws -> UserRecord<Profile>
+  func update<Profile>(_ record: UserRecord<Profile>) throws
+  func delete(_ id: String) throws
 }
 
 extension Int {
@@ -28,29 +59,22 @@ extension Int {
     return self >= of.lowerBound && self <= of.upperBound
   }
 }
-public class AccessManager {
 
-  public enum Exception: Error {
-    case Reasonable(String)
-    case OperationFailure
-    case CryptoFailure
-    case UserExists
-    case UserNotExists
-    case InvalidLogin
-    case LoginFailure
-    case TokenFailure
-    case InvalidToken
-    case Unsupported
-    case DatabaseConnectionFailure
-  }
+public class AccessManager<Profile> where Profile: Codable {
+
   internal let _cipher: Cipher
   internal let _keyIterations: Int
   internal let _digest: Digest
   internal let _saltLength: Int
-  internal let _udb: UserDatabase
   internal let _sizeLimitOfCredential: CountableClosedRange<Int>
   internal let _managerID: String
   internal let _alg: JWT.Alg
+
+  typealias U = UserRecord<Profile>
+  internal let _insert: (_ record: U ) throws -> Void
+  internal let _select: (_ id: String) throws -> U
+  internal let _update: (_ record: U) throws -> Void
+  internal let _delete: (_ id: String) throws -> Void
 
   public var id: String { return _managerID }
   public init(cipher: Cipher = .aes_256_cbc, keyIterations: Int = 1024,
@@ -63,103 +87,110 @@ public class AccessManager {
     _digest = digest
     _saltLength = saltLength
     _sizeLimitOfCredential = sizeLimitOfCredential
-    _udb = udb
     _alg = alg
     _managerID = UUID().string
+    _insert = udb.insert
+    _select = udb.select
+    _update = udb.update
+    _delete = udb.delete
   }
 
   /// register a new user record
-  public func register(username: String, password: String) throws {
-    let usr = username.stringByEncodingURL
+  public func register(id: String, password: String, profile: Profile) throws {
+    let usr = id.stringByEncodingURL
     let pwd = password.stringByEncodingURL
-    guard username.count.inRange(of: _sizeLimitOfCredential),
+    guard id.count.inRange(of: _sizeLimitOfCredential),
       password.count.inRange(of: _sizeLimitOfCredential),
       !usr.isEmpty, !pwd.isEmpty else {
-        throw Exception.InvalidLogin
+        throw Exception.Fault("invalid login")
     }
     guard let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
       let shadow = usr.encrypt(_cipher, password: pwd, salt: salt)
       else {
-        throw Exception.CryptoFailure
+        throw Exception.Fault("crypto failure")
     }
-    let u = UserRecord(name: usr, salt: salt, shadow: shadow)
-    try _udb.insert(user: u)
+    let u = UserRecord<Profile>(id: usr, salt: salt, shadow: shadow, profile: profile)
+    try _insert(u)
   }
 
   /// update the user password
-  public func update(username: String, password: String) throws {
-    let usr = username.stringByEncodingURL
+  public func update(id: String, password: String, profile: Profile) throws {
+    let usr = id.stringByEncodingURL
     let pwd = password.stringByEncodingURL
-    guard username.count.inRange(of: _sizeLimitOfCredential),
+    guard id.count.inRange(of: _sizeLimitOfCredential),
       password.count.inRange(of: _sizeLimitOfCredential),
       !usr.isEmpty, !pwd.isEmpty,
       let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
       let shadow = usr.encrypt(_cipher, password: pwd, salt: salt)
       else {
-        throw Exception.CryptoFailure
+        throw Exception.Fault("crypto failure")
     }
-    let u = UserRecord(name: usr, salt: salt, shadow: shadow)
-    try _udb.update(user: u)
+    let u = UserRecord<Profile>(id: usr, salt: salt, shadow: shadow, profile: profile)
+    try _update(u)
   }
 
   /// login to generate a valid jwt token
-  public func login(username: String, password: String,
+  public func login(id: String, password: String,
                      subject: String = "", timeout: Int = 3600,
                      headers: [String:Any] = [:]) throws -> String {
-    let usr = username.stringByEncodingURL
+    let usr = id.stringByEncodingURL
     let pwd = password.stringByEncodingURL
-    guard username.count.inRange(of: _sizeLimitOfCredential),
+    guard id.count.inRange(of: _sizeLimitOfCredential),
     password.count.inRange(of: _sizeLimitOfCredential),
       !usr.isEmpty, !pwd.isEmpty else {
-        throw Exception.InvalidLogin
+        throw Exception.Fault("invalid login")
     }
-    let u = try _udb.select(username: usr)
-    guard let decodedUsername = u.shadow.decrypt(_cipher, password: pwd, salt: u.salt) else {
-      throw Exception.CryptoFailure
-    }
-    guard decodedUsername == usr else {
-      throw Exception.LoginFailure
+    let u = try _select(usr)
+    guard
+      let decodedUsername = u.shadow.decrypt(_cipher, password: pwd, salt: u.salt),
+      decodedUsername == usr
+      else {
+      throw Exception.Fault("crypto failure")
     }
     let now = time(nil)
     let expiration = now + timeout
     let claims:[String: Any] = [
-        "iss":_managerID, "sub": subject, "aud": username,
+        "iss":_managerID, "sub": subject, "aud": id,
         "exp": expiration, "nbf": now, "iat": now, "jit": UUID().string
       ]
 
     guard let jwt = JWTCreator(payload: claims) else {
-      throw Exception.TokenFailure
+      throw Exception.Fault("token failure")
     }
 
     return try jwt.sign(alg: _alg, key: u.salt, headers: headers)
   }
 
   /// verify a jwt token
-  public func verify(username: String, token: String) throws {
+  public func verify(id: String, token: String) throws {
     guard let jwt = JWTVerifier(token) else {
-      throw Exception.TokenFailure
+      throw Exception.Fault("token failure")
     }
-    let usr = username.stringByEncodingURL
-    guard username.count.inRange(of: _sizeLimitOfCredential),
+    let usr = id.stringByEncodingURL
+    guard id.count.inRange(of: _sizeLimitOfCredential),
       !usr.isEmpty else {
-        throw Exception.InvalidLogin
+        throw Exception.Fault("invalid login")
     }
-    let u = try _udb.select(username: usr)
+    let u = try _select(usr)
     let now = time(nil)
     try jwt.verify(algo: _alg, key: HMACKey(u.salt))
     guard let iss = jwt.payload["iss"] as? String, iss == _managerID,
-      let aud = jwt.payload["aud"] as? String, aud == username,
+      let aud = jwt.payload["aud"] as? String, aud == id,
       let timeout = jwt.payload["exp"] as? Int, now <= timeout,
       let nbf = jwt.payload["nbf"] as? Int, nbf <= now else {
-        throw Exception.TokenFailure
+        throw Exception.Fault("token failure")
     }
   }
 
+  public func load(id: String) throws -> UserRecord<Profile> {
+    return try _select(id)
+  }
+  
   /// drop a user
-  public func drop(username: String) throws {
-    try _udb.delete(username: username)
+  public func drop(id: String) throws {
+    try _delete(id)
   }
 }
 

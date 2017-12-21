@@ -1,7 +1,7 @@
 import PerfectThread
 import PerfectMySQL
 import PerfectSSOAuth
-
+/*
 public class UDBMySQL: UserDatabase {
 
   typealias Exception = AccessManager.Exception
@@ -130,4 +130,4 @@ CREATE TABLE IF NOT EXISTS users(
     }
   }
 }
-
+*/
