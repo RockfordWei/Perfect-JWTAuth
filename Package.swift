@@ -11,28 +11,35 @@ if let database = getenv("DATABASE_DRIVER") {
   db = "ALL"
 }
 switch db {
+case "MariaDB":
+  repos.append("Perfect-MariaDB")
+  targets.append(Target(name: "UDBMariaDB", dependencies:["PerfectSSOAuth"]))
+  excludes = ["Sources/UDBJSONFile", "Sources/UDBSQLite", "Sources/UDBMySQL"]
+  break
 case "MySQL":
   repos.append("Perfect-MySQL")
   targets.append(Target(name: "UDBMySQL", dependencies:["PerfectSSOAuth"]))
-  excludes = ["Sources/UDBJSONFile", "Sources/UDBSQLite"]
+  excludes = ["Sources/UDBJSONFile", "Sources/UDBSQLite", "Sources/UDBMariaDB"]
   break
 case "SQLite":
   repos.append("Perfect-SQLite")
   targets.append(Target(name: "UDBSQLite", dependencies:["PerfectSSOAuth"]))
-  excludes = ["Sources/UDBJSONFile", "Sources/UDBMySQL"]
+  excludes = ["Sources/UDBJSONFile", "Sources/UDBMySQL", "Sources/UDBMariaDB"]
   break
 case "JSONFile":
   targets.append(Target(name: "UDBJSONFile", dependencies: ["PerfectSSOAuth"]))
-  excludes = ["Sources/UDBSQLite", "Sources/UDBMySQL"]
+  excludes = ["Sources/UDBSQLite", "Sources/UDBMySQL", "Sources/UDBMariaDB"]
   break
 default:
   repos.append("Perfect-SQLite")
   repos.append("Perfect-MySQL")
+  repos.append("Perfect-MariaDB")
+  targets.append(Target(name: "UDBMariaDB", dependencies:["PerfectSSOAuth"]))
   targets.append(Target(name: "UDBMySQL", dependencies:["PerfectSSOAuth"]))
   targets.append(Target(name: "UDBSQLite", dependencies:["PerfectSSOAuth"]))
   targets.append(Target(name: "UDBJSONFile", dependencies: ["PerfectSSOAuth"]))
-  targets.append(Target(name: "PerfectSSOAuthTests", 
-  dependencies: ["PerfectSSOAuth", "UDBJSONFile", "UDBSQLite", "UDBMySQL"]))
+  targets.append(Target(name: "PerfectSSOAuthTests",
+  dependencies: ["PerfectSSOAuth", "UDBJSONFile", "UDBSQLite", "UDBMySQL", "UDBMariaDB"]))
   excludes = []
 }
 

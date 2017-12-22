@@ -5,6 +5,7 @@ import Foundation
 import UDBJSONFile
 import UDBSQLite
 import UDBMySQL
+import UDBMariaDB
 import PerfectMySQL
 
 struct Profile: Codable {
@@ -30,6 +31,7 @@ class PerfectSSOAuthTests: XCTestCase {
     ("testJSONDir", testJSONDir),
     ("testSQLite", testSQLite),
     ("testMySQL", testMySQL),
+    ("testMariaDB", testMariaDB),
     ]
 
   override func setUp() {
@@ -43,10 +45,60 @@ class PerfectSSOAuthTests: XCTestCase {
     }
     _ = mysql.query(statement: "DROP TABLE \(table)")
   }
+  func testMariaDB() {
+    do {
+      let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
+       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
+      let acm = AccessManager<Profile>(udb: udb)
+      try acm.register(id: username, password: godpass, profile: profile)
+      _ = try acm.login(id: username, password: godpass)
+      let rocky = try acm.load(id: username)
+      print(rocky.profile)
+    } catch {
+      XCTFail(error.localizedDescription)
+    }
+    do {
+      let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
+                                      password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
+      let acm = AccessManager<Profile>(udb: udb)
+      _ = try acm.login(id: username, password: badpass)
+    } catch Exception.Fault(let reason) {
+      print(reason)
+    } catch {
+      XCTFail(error.localizedDescription)
+    }
+    do {
+      let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
+                                      password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
+      let acm = AccessManager<Profile>(udb: udb)
+      let token = try acm.login(id: username, password: godpass)
+      print(token)
+      sleep(3)
+      print("wait for verification")
+      try acm.verify(id: username, token: token)
+    } catch {
+      XCTFail(error.localizedDescription)
+    }
+    do {
+      let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
+                                      password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
+      let acm = AccessManager<Profile>(udb: udb)
+      var rock = profile
+      rock.email = "rockywei@gmx.com"
+      try acm.update(id: username, password: badpass, profile: rock)
+      let r:UserRecord<Profile> = try acm.load(id: username)
+      XCTAssertNotEqual(profile.email, r.profile.email)
+      print(r.profile)
+      _ = try acm.login(id: username, password: badpass)
+      try acm.drop(id: username)
+    } catch {
+      print("user deleted")
+    }
+  }
   func testMySQL() {
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
-       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
+                                      password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
       let acm = AccessManager<Profile>(udb: udb)
       try acm.register(id: username, password: godpass, profile: profile)
       _ = try acm.login(id: username, password: godpass)
