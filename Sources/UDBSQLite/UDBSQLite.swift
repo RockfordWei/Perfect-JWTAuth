@@ -68,8 +68,8 @@ public class UDBSQLite<Profile>: UserDatabase {
       var count = 0
       try self.db.forEachRow(statement:
         "SELECT id FROM \(self.table) WHERE id = ? LIMIT 1",
-                             doBindings: { stmt in
-                              try stmt.bind(position: 1, id)
+        doBindings: { stmt in
+          try stmt.bind(position: 1, id)
       }) { _, _ in
         count += 1
       }
@@ -85,8 +85,8 @@ public class UDBSQLite<Profile>: UserDatabase {
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
-    let dic = try json.jsonDecode() as? [String: Any] else {
-      throw Exception.Fault("json encoding failure")
+      let dic = try json.jsonDecode() as? [String: Any] else {
+        throw Exception.Fault("json encoding failure")
     }
     try lock.doWithLock {
       let properties:[String] = fields.map { $0.name }
@@ -130,8 +130,8 @@ public class UDBSQLite<Profile>: UserDatabase {
       let col = columns.joined(separator: ",")
       try self.db.forEachRow(statement:
         "SELECT id, salt, shadow, \(col) FROM \(self.table) WHERE id = ? LIMIT 1",
-                             doBindings: { stmt in
-                              try stmt.bind(position: 1, id)
+        doBindings: { stmt in
+          try stmt.bind(position: 1, id)
       }) { rec, _ in
         let id = rec.columnText(position: 0)
         let salt = rec.columnText(position: 1)
@@ -189,14 +189,15 @@ public class UDBSQLite<Profile>: UserDatabase {
     try lock.doWithLock {
       let columns:[String] = fields.map { "\($0.name) = ?" }
       let sentence = columns.joined(separator: ",")
-      try db.execute(statement: "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"){
+      let sql = "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
+      debugPrint(sql)
+      try db.execute(statement: sql){
         stmt in
-        try stmt.bind(position: 3, record.id)
         try stmt.bind(position: 1, record.salt)
         try stmt.bind(position: 2, record.shadow)
         for i in 0 ..< fields.count {
           let f = fields[i]
-          let j = i + 4
+          let j = i + 3
           switch f.type {
           case "TEXT":
             let s = dic[f.name] as? String ?? ""
@@ -210,12 +211,15 @@ public class UDBSQLite<Profile>: UserDatabase {
             let s = dic[f.name] as? Int ?? 0
             try stmt.bind(position: j, s)
             break
+          case "BLOB":
+            let s = dic[f.name] as? [Int8] ?? []
+            try stmt.bind(position:j, s)
           default:
             throw Exception.Fault("incompatible value type")
           }
         }
+        try stmt.bind(position: fields.count + 3, record.id)
       }
     }
   }
 }
-
