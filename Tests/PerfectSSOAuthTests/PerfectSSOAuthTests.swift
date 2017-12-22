@@ -53,7 +53,7 @@ class PerfectSSOAuthTests: XCTestCase {
       try acm.register(id: username, password: godpass, profile: profile)
       _ = try acm.login(id: username, password: godpass)
       let rocky = try acm.load(id: username)
-      print(rocky.profile)
+      print(rocky)
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -86,9 +86,9 @@ class PerfectSSOAuthTests: XCTestCase {
       var rock = profile
       rock.email = "rockywei@gmx.com"
       try acm.update(id: username, password: badpass, profile: rock)
-      let r:UserRecord<Profile> = try acm.load(id: username)
-      XCTAssertNotEqual(profile.email, r.profile.email)
-      print(r.profile)
+      let r = try acm.load(id: username)
+      XCTAssertNotEqual(profile.email, r.email)
+      print(r)
       _ = try acm.login(id: username, password: badpass)
       try acm.drop(id: username)
     } catch {
@@ -103,7 +103,7 @@ class PerfectSSOAuthTests: XCTestCase {
       try acm.register(id: username, password: godpass, profile: profile)
       _ = try acm.login(id: username, password: godpass)
       let rocky = try acm.load(id: username)
-      print(rocky.profile)
+      print(rocky)
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -136,9 +136,9 @@ class PerfectSSOAuthTests: XCTestCase {
       var rock = profile
       rock.email = "rockywei@gmx.com"
       try acm.update(id: username, password: badpass, profile: rock)
-      let r:UserRecord<Profile> = try acm.load(id: username)
-      XCTAssertNotEqual(profile.email, r.profile.email)
-      print(r.profile)
+      let r:Profile = try acm.load(id: username)
+      XCTAssertNotEqual(profile.email, r.email)
+      print(r)
       _ = try acm.login(id: username, password: badpass)
       try acm.drop(id: username)
     } catch {
@@ -152,7 +152,7 @@ class PerfectSSOAuthTests: XCTestCase {
       try acm.register(id: username, password: godpass, profile: profile)
       _ = try acm.login(id: username, password: godpass)
       let rocky = try acm.load(id: username)
-      print(rocky.profile)
+      print(rocky)
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -182,9 +182,9 @@ class PerfectSSOAuthTests: XCTestCase {
       var rock = profile
       rock.email = "rockywei@gmx.com"
       try acm.update(id: username, password: badpass, profile: rock)
-      let r:UserRecord<Profile> = try acm.load(id: username)
-      XCTAssertNotEqual(profile.email, r.profile.email)
-      print(r.profile)
+      let r = try acm.load(id: username)
+      XCTAssertNotEqual(profile.email, r.email)
+      print(r)
       _ = try acm.login(id: username, password: badpass)
       try acm.drop(id: username)
     } catch {
@@ -223,8 +223,8 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
       let acm = AccessManager<Profile>(udb: udb)
-      let rocky: UserRecord<Profile> = try acm.load(id: username)
-      print(rocky.profile)
+      let rocky = try acm.load(id: username)
+      print(rocky)
       try acm.update(id: username, password: badpass, profile: profile)
       _ = try acm.login(id: username, password: badpass)
       try acm.drop(id: username)

@@ -184,8 +184,8 @@ public class AccessManager<Profile> where Profile: Codable {
     }
   }
 
-  public func load(id: String) throws -> UserRecord<Profile> {
-    return try _select(id)
+  public func load(id: String) throws -> Profile {
+    return try _select(id).profile
   }
   
   /// drop a user
