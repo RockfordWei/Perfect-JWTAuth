@@ -190,7 +190,6 @@ public class UDBSQLite<Profile>: UserDatabase {
       let columns:[String] = fields.map { "\($0.name) = ?" }
       let sentence = columns.joined(separator: ",")
       let sql = "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
-      debugPrint(sql)
       try db.execute(statement: sql){
         stmt in
         try stmt.bind(position: 1, record.salt)

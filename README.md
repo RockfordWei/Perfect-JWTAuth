@@ -48,7 +48,7 @@ This package builds with Swift Package Manager and is part of the [Perfect](http
 
 ## Objectives
 
-- independently work without ORM or even database, although it support with all Perfect database drivers.
+- independently work without ORMs (although it includes a mini ORM actually) or even databases, while it will supports all Perfect database drivers soon.
 - extremely fast, scalable and thread-safe
 - Session free: a full application of JWT for the single sign-on authentication to any virtual private clouds.
 
@@ -159,6 +159,17 @@ You can retrieve the user profile by its id:
 
 ``` swift 
  let profile = try acm.load(id: username)
+```
+#### Update Password
+
+``` swift
+try acm.update(id: username, password: new_password)
+```
+
+#### Update Profile
+
+``` swift
+try acm.update(id: username, profile: new_profile)
 ```
 
 #### Drop A User

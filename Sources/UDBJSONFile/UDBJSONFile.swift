@@ -1,6 +1,7 @@
 import Foundation
 import PerfectThread
 import PerfectSSOAuth
+import PerfectLib
 
 typealias Exception = PerfectSSOAuth.Exception
 

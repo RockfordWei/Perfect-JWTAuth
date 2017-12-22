@@ -149,6 +149,7 @@ public class UDBMySQL<Profile>: UserDatabase {
       }
     }
   }
+
   public func update<Profile>(_ record: UserRecord<Profile>) throws {
     guard exists(record.id) else {
       throw Exception.Fault("user does not exists")

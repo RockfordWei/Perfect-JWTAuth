@@ -167,7 +167,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
       guard stmt.prepare(statement: sql) else {
-          throw Exception.Fault(db.errorMessage())
+        throw Exception.Fault(db.errorMessage())
       }
       stmt.bindParam(record.salt)
       stmt.bindParam(record.shadow)

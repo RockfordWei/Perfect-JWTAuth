@@ -114,8 +114,7 @@ public class AccessManager<Profile> where Profile: Codable {
     try _insert(u)
   }
 
-  /// update the user password
-  public func update(id: String, password: String, profile: Profile) throws {
+  public func update(id: String, password: String) throws {
     let usr = id.stringByEncodingURL
     let pwd = password.stringByEncodingURL
     guard id.count.inRange(of: _sizeLimitOfCredential),
@@ -127,8 +126,23 @@ public class AccessManager<Profile> where Profile: Codable {
       else {
         throw Exception.Fault("crypto failure")
     }
-    let u = UserRecord<Profile>(id: usr, salt: salt, shadow: shadow, profile: profile)
-    try _update(u)
+    var u = try self._select(id)
+    u.salt = salt
+    u.shadow = shadow
+    try self._update(u)
+  }
+
+  /// update the user password
+  public func update(id: String, profile: Profile) throws {
+    let usr = id.stringByEncodingURL
+    guard id.count.inRange(of: _sizeLimitOfCredential),
+      !usr.isEmpty
+      else {
+        throw Exception.Fault("invalid login")
+    }
+    var u = try self._select(id)
+    u.profile = profile
+    try self._update(u)
   }
 
   /// login to generate a valid jwt token
