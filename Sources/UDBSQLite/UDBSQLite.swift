@@ -17,6 +17,11 @@ public class UDBSQLite<Profile>: UserDatabase {
   }
 
   internal let fields: [Field]
+  internal var sqlExists: String? = nil
+  internal var sqlSelect: String? = nil
+  internal var sqlInsert: String? = nil
+  internal var sqlUpdate: String? = nil
+  internal var sqlDelete: String? = nil
   /// Create a database connection and attach the user table
   /// - parameters:
   ///   - path: the file path of the sqlite3 database
@@ -66,8 +71,14 @@ public class UDBSQLite<Profile>: UserDatabase {
   internal func exists(_ id: String) -> Bool {
     let count = (try? lock.doWithLock {
       var count = 0
-      try self.db.forEachRow(statement:
-        "SELECT id FROM \(self.table) WHERE id = ? LIMIT 1",
+      let sql: String
+      if let cache = sqlExists {
+        sql = cache
+      } else {
+        sql = "SELECT id FROM \(self.table) WHERE id = ? LIMIT 1"
+        sqlExists = sql
+      }
+      try self.db.forEachRow(statement: sql,
         doBindings: { stmt in
           try stmt.bind(position: 1, id)
       }) { _, _ in
@@ -89,12 +100,18 @@ public class UDBSQLite<Profile>: UserDatabase {
         throw Exception.Fault("json encoding failure")
     }
     try lock.doWithLock {
-      let properties:[String] = fields.map { $0.name }
-      let columns = ["id", "salt", "shadow"] + properties
-      let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
-      let col = columns.joined(separator: ",")
-      let que = qmarks.joined(separator: ",")
-      let sql = "INSERT INTO \(table)(\(col)) VALUES(\(que))"
+      let sql: String
+      if let cache = sqlInsert {
+        sql = cache
+      } else {
+        let properties:[String] = fields.map { $0.name }
+        let columns = ["id", "salt", "shadow"] + properties
+        let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
+        let col = columns.joined(separator: ",")
+        let que = qmarks.joined(separator: ",")
+        sql = "INSERT INTO \(table)(\(col)) VALUES(\(que))"
+        sqlInsert = sql
+      }
       try db.execute(statement: sql){
         stmt in
         try stmt.bind(position: 1, record.id)
@@ -128,8 +145,14 @@ public class UDBSQLite<Profile>: UserDatabase {
       var u: UserRecord<Profile>? = nil
       let columns:[String] = fields.map { $0.name }
       let col = columns.joined(separator: ",")
-      try self.db.forEachRow(statement:
-        "SELECT id, salt, shadow, \(col) FROM \(self.table) WHERE id = ? LIMIT 1",
+      let sql: String
+      if let cache = sqlSelect {
+        sql = cache
+      } else {
+        sql = "SELECT id, salt, shadow, \(col) FROM \(self.table) WHERE id = ? LIMIT 1"
+        sqlSelect = sql
+      }
+      try self.db.forEachRow(statement: sql,
         doBindings: { stmt in
           try stmt.bind(position: 1, id)
       }) { rec, _ in
@@ -168,8 +191,15 @@ public class UDBSQLite<Profile>: UserDatabase {
     guard exists(id) else {
       throw Exception.Fault("user does not exists")
     }
+    let sql: String
+    if let cache = sqlDelete {
+      sql = cache
+    } else {
+      sql = "DELETE FROM \(table) WHERE id = ?"
+      sqlDelete = sql
+    }
     try lock.doWithLock {
-      try db.execute(statement: "DELETE FROM \(table) WHERE id = ?"){
+      try db.execute(statement: sql){
         stmt in
         try stmt.bind(position: 1, id)
       }
@@ -187,9 +217,15 @@ public class UDBSQLite<Profile>: UserDatabase {
         throw Exception.Fault("json encoding failure")
     }
     try lock.doWithLock {
-      let columns:[String] = fields.map { "\($0.name) = ?" }
-      let sentence = columns.joined(separator: ",")
-      let sql = "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
+      let sql: String
+      if let cache = sqlUpdate {
+        sql = cache
+      } else {
+        let columns:[String] = fields.map { "\($0.name) = ?" }
+        let sentence = columns.joined(separator: ",")
+        sql = "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
+        sqlUpdate = sql
+      }
       try db.execute(statement: sql){
         stmt in
         try stmt.bind(position: 1, record.salt)

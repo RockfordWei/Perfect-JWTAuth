@@ -36,6 +36,11 @@ public class UDBMySQL<Profile>: UserDatabase {
   }
 
   internal let fields: [Field]
+  internal var sqlExists: String? = nil
+  internal var sqlSelect: String? = nil
+  internal var sqlInsert: String? = nil
+  internal var sqlUpdate: String? = nil
+  internal var sqlDelete: String? = nil
 
   public init<Profile: Codable>
     (host: String, user: String, password: String,
@@ -79,8 +84,14 @@ public class UDBMySQL<Profile>: UserDatabase {
     let count = (try? lock.doWithLock {
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
-      guard stmt.prepare(statement:
-        "SELECT id FROM \(self.table) WHERE id = ? LIMIT 1")
+      let sql: String
+      if let cache = sqlExists {
+        sql = cache
+      } else {
+        sql = "SELECT id FROM \(self.table) WHERE id = ? LIMIT 1"
+        sqlExists = sql
+      }
+      guard stmt.prepare(statement:sql)
         else {
           throw Exception.Fault(db.errorMessage())
       }
@@ -104,12 +115,18 @@ public class UDBMySQL<Profile>: UserDatabase {
         throw Exception.Fault("json encoding failure")
     }
     try lock.doWithLock {
+      let sql: String
       let properties:[String] = fields.map { $0.name }
-      let columns = ["id", "salt", "shadow"] + properties
-      let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
-      let col = columns.joined(separator: ",")
-      let que = qmarks.joined(separator: ",")
-      let sql = "INSERT INTO \(table)(\(col)) VALUES(\(que))"
+      if let cache = sqlInsert {
+        sql = cache
+      } else {
+        let columns = ["id", "salt", "shadow"] + properties
+        let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
+        let col = columns.joined(separator: ",")
+        let que = qmarks.joined(separator: ",")
+        sql = "INSERT INTO \(table)(\(col)) VALUES(\(que))"
+        sqlInsert = sql
+      }
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
       guard stmt.prepare(statement: sql)
@@ -140,10 +157,16 @@ public class UDBMySQL<Profile>: UserDatabase {
         throw Exception.Fault("json encoding failure")
     }
     try lock.doWithLock {
+      let sql: String
       let properties:[String] = fields.map { $0.name }
-      let columns:[String] = fields.map { "\($0.name) = ?" }
-      let sentence = columns.joined(separator: ",")
-      let sql = "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
+      if let cache = sqlUpdate {
+        sql = cache
+      } else {
+        let columns:[String] = fields.map { "\($0.name) = ?" }
+        let sentence = columns.joined(separator: ",")
+        sql = "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
+        sqlUpdate = sql
+      }
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
       guard stmt.prepare(statement: sql) else {
@@ -166,8 +189,15 @@ public class UDBMySQL<Profile>: UserDatabase {
     return try lock.doWithLock {
       var u: UserRecord<Profile>? = nil
       let columns:[String] = fields.map { $0.name }
-      let col = columns.joined(separator: ",")
-      let sql = "SELECT id, salt, shadow, \(col) FROM \(self.table) WHERE id = ? LIMIT 1"
+
+      let sql: String
+      if let cache = sqlSelect {
+        sql = cache
+      } else {
+        let col = columns.joined(separator: ",")
+        sql = "SELECT id, salt, shadow, \(col) FROM \(self.table) WHERE id = ? LIMIT 1"
+        sqlSelect = sql
+      }
       let stmt = MySQLStmt(self.db)
       defer { stmt.close() }
       guard stmt.prepare(statement: sql)
@@ -213,8 +243,14 @@ public class UDBMySQL<Profile>: UserDatabase {
     try lock.doWithLock {
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
-      guard stmt.prepare(statement:
-        "DELETE FROM \(self.table) WHERE id = ?")
+      let sql: String
+      if let cache = sqlDelete {
+        sql = cache
+      } else {
+        sql = "DELETE FROM \(self.table) WHERE id = ?"
+        sqlDelete = sql
+      }
+      guard stmt.prepare(statement: sql)
         else {
           throw Exception.Fault(db.errorMessage())
       }
@@ -225,5 +261,3 @@ public class UDBMySQL<Profile>: UserDatabase {
     }
   }
 }
-
-
