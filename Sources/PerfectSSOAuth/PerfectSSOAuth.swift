@@ -31,7 +31,7 @@ extension Int {
   }
 }
 
-public class AccessManager<Profile> where Profile: Codable {
+public class LoginManager<Profile> where Profile: Codable {
 
   internal let _cipher: Cipher
   internal let _keyIterations: Int

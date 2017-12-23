@@ -49,10 +49,10 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
        password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      try acm.register(id: username, password: godpass, profile: profile)
-      _ = try acm.login(id: username, password: godpass)
-      let rocky = try acm.load(id: username)
+      let manager = LoginManager<Profile>(udb: udb)
+      try manager.register(id: username, password: godpass, profile: profile)
+      _ = try manager.login(id: username, password: godpass)
+      let rocky = try manager.load(id: username)
       print(rocky)
     } catch {
       XCTFail(error.localizedDescription)
@@ -60,8 +60,8 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
                                       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      _ = try acm.login(id: username, password: badpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
       print(reason)
     } catch {
@@ -70,35 +70,35 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
                                       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      let token = try acm.login(id: username, password: godpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      let token = try manager.login(id: username, password: godpass)
       print(token)
       sleep(1)
       print("wait for verification")
-      try acm.verify(id: username, token: token)
+      try manager.verify(id: username, token: token)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
                                         password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      try acm.update(id: username, password: badpass)
-      _ = try acm.login(id: username, password: badpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      try manager.update(id: username, password: badpass)
+      _ = try manager.login(id: username, password: badpass)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
                                         password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      var rocky = try acm.load(id: username)
+      let manager = LoginManager<Profile>(udb: udb)
+      var rocky = try manager.load(id: username)
       print(rocky)
       rocky.email = "rockywei@gmx.com"
-      try acm.update(id: username, profile: rocky)
-      let r = try acm.load(id: username)
+      try manager.update(id: username, profile: rocky)
+      let r = try manager.load(id: username)
       XCTAssertEqual(rocky.email, r.email)
-      try acm.drop(id: username)
+      try manager.drop(id: username)
     } catch {
       print("user deleted")
     }
@@ -107,10 +107,10 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
                                       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      try acm.register(id: username, password: godpass, profile: profile)
-      _ = try acm.login(id: username, password: godpass)
-      let rocky = try acm.load(id: username)
+      let manager = LoginManager<Profile>(udb: udb)
+      try manager.register(id: username, password: godpass, profile: profile)
+      _ = try manager.login(id: username, password: godpass)
+      let rocky = try manager.load(id: username)
       print(rocky)
     } catch {
       XCTFail(error.localizedDescription)
@@ -118,8 +118,8 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
                                       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      _ = try acm.login(id: username, password: badpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
       print(reason)
     } catch {
@@ -128,35 +128,35 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
                                       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      let token = try acm.login(id: username, password: godpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      let token = try manager.login(id: username, password: godpass)
       print(token)
       sleep(1)
       print("wait for verification")
-      try acm.verify(id: username, token: token)
+      try manager.verify(id: username, token: token)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
                                       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      try acm.update(id: username, password: badpass)
-      _ = try acm.login(id: username, password: badpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      try manager.update(id: username, password: badpass)
+      _ = try manager.login(id: username, password: badpass)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
                                       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      var rocky = try acm.load(id: username)
+      let manager = LoginManager<Profile>(udb: udb)
+      var rocky = try manager.load(id: username)
       print(rocky)
       rocky.email = "rockywei@gmx.com"
-      try acm.update(id: username, profile: rocky)
-      let r = try acm.load(id: username)
+      try manager.update(id: username, profile: rocky)
+      let r = try manager.load(id: username)
       XCTAssertEqual(rocky.email, r.email)
-      try acm.drop(id: username)
+      try manager.drop(id: username)
     } catch {
       print("user deleted")
     }
@@ -164,18 +164,18 @@ class PerfectSSOAuthTests: XCTestCase {
   func testSQLite() {
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      try acm.register(id: username, password: godpass, profile: profile)
-      _ = try acm.login(id: username, password: godpass)
-      let rocky = try acm.load(id: username)
+      let manager = LoginManager<Profile>(udb: udb)
+      try manager.register(id: username, password: godpass, profile: profile)
+      _ = try manager.login(id: username, password: godpass)
+      let rocky = try manager.load(id: username)
       print(rocky)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      _ = try acm.login(id: username, password: badpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
       print(reason)
     } catch {
@@ -183,33 +183,33 @@ class PerfectSSOAuthTests: XCTestCase {
     }
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      let token = try acm.login(id: username, password: godpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      let token = try manager.login(id: username, password: godpass)
       print(token)
       sleep(1)
       print("wait for verification")
-      try acm.verify(id: username, token: token)
+      try manager.verify(id: username, token: token)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      try acm.update(id: username, password: badpass)
-      _ = try acm.login(id: username, password: badpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      try manager.update(id: username, password: badpass)
+      _ = try manager.login(id: username, password: badpass)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, table: table, sample: profile)
-      let acm = AccessManager<Profile>(udb: udb)
-      var rocky = try acm.load(id: username)
+      let manager = LoginManager<Profile>(udb: udb)
+      var rocky = try manager.load(id: username)
       print(rocky)
       rocky.email = "rockywei@gmx.com"
-      try acm.update(id: username, profile: rocky)
-      let r = try acm.load(id: username)
+      try manager.update(id: username, profile: rocky)
+      let r = try manager.load(id: username)
       XCTAssertEqual(rocky.email, r.email)
-      try acm.drop(id: username)
+      try manager.drop(id: username)
     } catch {
       print("user deleted")
     }
@@ -217,16 +217,16 @@ class PerfectSSOAuthTests: XCTestCase {
   func testJSONDir() {
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
-      let acm = AccessManager<Profile>(udb: udb)
-      try acm.register(id: username, password: godpass, profile: profile)
-      _ = try acm.login(id: username, password: godpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      try manager.register(id: username, password: godpass, profile: profile)
+      _ = try manager.login(id: username, password: godpass)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
-      let acm = AccessManager<Profile>(udb: udb)
-      _ = try acm.login(id: username, password: badpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
       print(reason)
     } catch {
@@ -234,33 +234,33 @@ class PerfectSSOAuthTests: XCTestCase {
     }
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
-      let acm = AccessManager<Profile>(udb: udb)
-      let token = try acm.login(id: username, password: godpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      let token = try manager.login(id: username, password: godpass)
       print(token)
       sleep(1)
       print("wait for verification")
-      try acm.verify(id: username, token: token)
+      try manager.verify(id: username, token: token)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
-      let acm = AccessManager<Profile>(udb: udb)
-      try acm.update(id: username, password: badpass)
-      _ = try acm.login(id: username, password: badpass)
+      let manager = LoginManager<Profile>(udb: udb)
+      try manager.update(id: username, password: badpass)
+      _ = try manager.login(id: username, password: badpass)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
-      let acm = AccessManager<Profile>(udb: udb)
-      var rocky = try acm.load(id: username)
+      let manager = LoginManager<Profile>(udb: udb)
+      var rocky = try manager.load(id: username)
       print(rocky)
       rocky.email = "rockywei@gmx.com"
-      try acm.update(id: username, profile: rocky)
-      let r = try acm.load(id: username)
+      try manager.update(id: username, profile: rocky)
+      let r = try manager.load(id: username)
       XCTAssertEqual(rocky.email, r.email)
-      try acm.drop(id: username)
+      try manager.drop(id: username)
     } catch {
       print("user deleted")
     }
