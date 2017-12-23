@@ -70,7 +70,7 @@ JSONFile|a native JSON file based user database
 SQLite|Perfect SQLite
 MySQL|Perfect MySQL
 MariaDB|Perfect MariaDB
-PostgreSQL| Coming Soon
+PostgreSQL| Perfect PostgreSQL
 MongoDB| Coming Soon
 Redis| Coming Soon
 
@@ -100,6 +100,7 @@ import UDBJSONFile|User database driven by a native JSON file system
 import UDBSQLite|User database driven by SQLite
 import UDBMySQL|User database driven by MySQL
 import UDBMariaDB|User database driven by MariaDB
+import UDBPostgreSQL|User database driven by PostgreSQL
 
 ### Customizable Profile
 

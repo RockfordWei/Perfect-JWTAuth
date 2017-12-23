@@ -5,27 +5,6 @@ import Foundation
 
 typealias Exception = PerfectSSOAuth.Exception
 
-extension MySQL {
-  public typealias KString = String
-  public typealias LongString = String
-  public static func TypeOf(_ swiftTypeName: String) -> String? {
-    let typeMap: [String: String] = [
-      "String": "VARCHAR(256)",
-      "KString": "VARCHAR(1024)",
-      "LongString": "VARCHAR(65535)",
-      "[Int8]": "TEXT", "[CChar]": "TEXT", "[UInt8]": "BLOB",
-      "Int": "INTEGER", "UInt": "INTEGER UNSIGNED",
-      "Int8": "TINYINT", "UInt8": "TINYINT UNSIGNED",
-      "Int16":"SMALLINT", "UInt16": "SMALLINT UNSIGNED",
-      "Int32": "INT", "UInt32":"INT UNSIGNED",
-      "Int64":"BIGINT", "UInt64": "BIGINT UNSIGNED",
-      "Float": "FLOAT", "Double": "DOUBLE",
-      "Date": "DATETIME"
-    ]
-    return typeMap[swiftTypeName]
-  }
-}
-
 extension MySQLStmt {
   public func bindParameter(_ x: Any) throws {
     if x is String, let y = x as? String {
@@ -75,7 +54,7 @@ public class UDBMySQL<Profile>: UserDatabase {
       throw Exception.Fault("invalid profile structure")
     }
     fields = try properties.map { s -> Field in
-      guard let tp = MySQL.TypeOf(s.typeName) else {
+      guard let tp = DataworkUtility.TypeOf(s.typeName) else {
         throw Exception.Fault("incompatible type name: \(s.typeName)")
       }
       return Field(name: s.fieldName, type: tp)
