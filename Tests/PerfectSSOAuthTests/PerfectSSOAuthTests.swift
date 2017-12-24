@@ -63,7 +63,7 @@ class PerfectSSOAuthTests: XCTestCase {
       let manager = LoginManager<Profile>(udb: udb)
       _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
-      print(reason)
+      print("expected error:", reason)
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -100,7 +100,7 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTAssertEqual(rocky.email, r.email)
       try manager.drop(id: username)
     } catch {
-      print("user deleted")
+      XCTFail("user deleted")
     }
   }
   func testMySQL() {
@@ -121,7 +121,7 @@ class PerfectSSOAuthTests: XCTestCase {
       let manager = LoginManager<Profile>(udb: udb)
       _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
-      print(reason)
+      print("expected error:", reason)
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -158,7 +158,7 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTAssertEqual(rocky.email, r.email)
       try manager.drop(id: username)
     } catch {
-      print("user deleted")
+      XCTFail("user deleted")
     }
   }
   func testSQLite() {
@@ -177,7 +177,7 @@ class PerfectSSOAuthTests: XCTestCase {
       let manager = LoginManager<Profile>(udb: udb)
       _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
-      print(reason)
+      print("expected error:", reason)
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -211,7 +211,7 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTAssertEqual(rocky.email, r.email)
       try manager.drop(id: username)
     } catch {
-      print("user deleted")
+      XCTFail("user deleted")
     }
   }
   func testJSONDir() {
@@ -228,7 +228,7 @@ class PerfectSSOAuthTests: XCTestCase {
       let manager = LoginManager<Profile>(udb: udb)
       _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
-      print(reason)
+      print("expected error:", reason)
     } catch {
       XCTFail(error.localizedDescription)
     }

@@ -4,6 +4,7 @@ import PerfectSSOAuth
 import Foundation
 
 typealias Exception = PerfectSSOAuth.Exception
+typealias Field = DataworkUtility.Field
 
 public class UDBSQLite<Profile>: UserDatabase {
   internal let lock: Threading.Lock
@@ -11,11 +12,6 @@ public class UDBSQLite<Profile>: UserDatabase {
   internal let table: String
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
-  struct Field {
-    public var name = ""
-    public var `type` = ""
-  }
-
   internal let fields: [Field]
   internal var sqlExists: String? = nil
   internal var sqlSelect: String? = nil
@@ -39,7 +35,7 @@ public class UDBSQLite<Profile>: UserDatabase {
       throw Exception.Fault("invalid profile structure")
     }
     fields = try properties.map { s -> Field in
-      let tp = s.typeName
+      let tp = s.type
       let typeName: String
       if tp.contains(string: "[") {
         typeName = "BLOB"
@@ -52,12 +48,12 @@ public class UDBSQLite<Profile>: UserDatabase {
       } else {
         throw Exception.Fault("incompatible type name: \(tp)")
       }
-      return Field(name: s.fieldName, type: typeName)
+      return Field(name: s.name, type: typeName)
     }
     let description:[String] = fields.map { "\($0.name) \($0.type)" }
     let fieldDescription = description.joined(separator: ",")
     let sql = """
-    CREATE TABLE IF NOT EXISTS users(
+    CREATE TABLE IF NOT EXISTS \(table)(
     id TEXT PRIMARY KEY NOT NULL,
     salt TEXT, shadow TEXT, \(fieldDescription))
     """
@@ -109,7 +105,7 @@ public class UDBSQLite<Profile>: UserDatabase {
         let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
         let col = columns.joined(separator: ",")
         let que = qmarks.joined(separator: ",")
-        sql = "INSERT INTO \(table)(\(col)) VALUES(\(que))"
+        sql = "INSERT INTO \(self.table)(\(col)) VALUES(\(que))"
         sqlInsert = sql
       }
       try db.execute(statement: sql){

@@ -4,6 +4,7 @@ import PerfectSSOAuth
 import Foundation
 
 typealias Exception = PerfectSSOAuth.Exception
+typealias Field = DataworkUtility.Field
 
 extension MySQLStmt {
   public func bindParameter(_ x: Any) throws {
@@ -30,11 +31,6 @@ public class UDBMySQL<Profile>: UserDatabase {
   internal let table: String
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
-  struct Field {
-    public var name = ""
-    public var `type` = ""
-  }
-
   internal let fields: [Field]
   internal var sqlExists: String? = nil
   internal var sqlSelect: String? = nil
@@ -59,15 +55,15 @@ public class UDBMySQL<Profile>: UserDatabase {
       throw Exception.Fault("invalid profile structure")
     }
     fields = try properties.map { s -> Field in
-      guard let tp = DataworkUtility.TypeOf(s.typeName) else {
-        throw Exception.Fault("incompatible type name: \(s.typeName)")
+      guard let tp = DataworkUtility.ANSITypeOf(s.type) else {
+        throw Exception.Fault("incompatible type name: \(s.type)")
       }
-      return Field(name: s.fieldName, type: tp)
+      return Field(name: s.name, type: tp)
     }
     let description:[String] = fields.map { "\($0.name) \($0.type)" }
     let fieldDescription = description.joined(separator: ",")
     let sql = """
-    CREATE TABLE IF NOT EXISTS users(
+    CREATE TABLE IF NOT EXISTS \(table)(
     id VARCHAR(80) PRIMARY KEY NOT NULL,
     salt VARCHAR(256), shadow VARCHAR(1024), \(fieldDescription))
     """
@@ -124,7 +120,7 @@ public class UDBMySQL<Profile>: UserDatabase {
         let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
         let col = columns.joined(separator: ",")
         let que = qmarks.joined(separator: ",")
-        sql = "INSERT INTO \(table)(\(col)) VALUES(\(que))"
+        sql = "INSERT INTO \(self.table)(\(col)) VALUES(\(que))"
         sqlInsert = sql
       }
       let stmt = MySQLStmt(db)
