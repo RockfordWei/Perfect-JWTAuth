@@ -131,7 +131,7 @@ JSONFile|`let udb = try UDBJSONFile<Profile>(directory: "/path/to/users")`
 SQLite|` let udb = try UDBSQLite<Profile>(path: "/path/to/db", table: "users", sample: profile)`
 MySQL|`let udb = try UDBMySQL<Profile>(host: "127.0.0.1", user: "root",password: "secret", database: "test", table: "users", sample: profile)`
 MariaDB|`let udb = try UDBMariaDB<Profile>(host: "127.0.0.1", user: "root",password: "secret", database: "test", table: "users", sample: profile)`
-
+PostgreSQL|`let udb = try UDBPostgreSQL<Profile>(connection: "postgresql://user:password@localhost/testdb", table: "users", sample: profile)`
 ### Login Manager
 
 Now you can use the `LoginManager` class to register, login, load profile, update password and update profile, or drop users:
