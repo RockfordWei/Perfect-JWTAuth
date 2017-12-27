@@ -145,7 +145,7 @@ You can use an existing embedded log file driver `let log = FileLogger("/path/to
 ``` swift
 public protocol LogManager {
   func report(_ userId: String, level: LogLevel, 
-  				event: LoginManagementEvent, message: String?)
+  event: LoginManagementEvent, message: String?)
 }
 
 ```
