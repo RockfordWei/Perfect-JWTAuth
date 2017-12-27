@@ -30,6 +30,9 @@ class PerfectSSOAuthTests: XCTestCase {
   let pgsql_usr = "rocky"
   let table = "users"
   let profile = Profile(firstName: "rocky", lastName: "wei", age: 21, email: "rocky@perfect.org")
+  let log = FileLogger("/tmp", GMT: false)
+  let pgconnection = "postgresql://rocky:rockford@maria/test"
+
   static var allTests = [
     ("testJSONDir", testJSONDir),
     ("testSQLite", testSQLite),
@@ -40,18 +43,11 @@ class PerfectSSOAuthTests: XCTestCase {
 
   override func setUp() {
     _ = PerfectCrypto.isInitialized
-    unlink(sqlite)
-    let mysql = MySQL()
-    guard mysql.setOption(.MYSQL_SET_CHARSET_NAME, "utf8mb4"),
-      mysql.connect(host: mysql_hst, user: mysql_usr, password: mysql_pwd, db: mysql_dbt) else {
-        XCTFail("connection failure")
-        return
-    }
-    _ = mysql.query(statement: "DROP TABLE \(table)")
   }
+
   func testStandard(udb: UserDatabase) {
     do {
-      let manager = LoginManager<Profile>(udb: udb)
+      let manager = LoginManager<Profile>(udb: udb, log: log)
       try manager.register(id: username, password: godpass, profile: profile)
       _ = try manager.login(id: username, password: godpass)
       let rocky = try manager.load(id: username)
@@ -60,7 +56,7 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTFail(error.localizedDescription)
     }
     do {
-      let manager = LoginManager<Profile>(udb: udb)
+      let manager = LoginManager<Profile>(udb: udb, log: log)
       _ = try manager.login(id: username, password: badpass)
     } catch Exception.Fault(let reason) {
       print("expected error:", reason)
@@ -68,24 +64,22 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTFail(error.localizedDescription)
     }
     do {
-      let manager = LoginManager<Profile>(udb: udb)
+      let manager = LoginManager<Profile>(udb: udb, log: log)
       let token = try manager.login(id: username, password: godpass)
       print(token)
-      sleep(1)
-      print("wait for verification")
       try manager.verify(id: username, token: token)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
-      let manager = LoginManager<Profile>(udb: udb)
+      let manager = LoginManager<Profile>(udb: udb, log: log)
       try manager.update(id: username, password: badpass)
       _ = try manager.login(id: username, password: badpass)
     } catch {
       XCTFail(error.localizedDescription)
     }
     do {
-      let manager = LoginManager<Profile>(udb: udb)
+      let manager = LoginManager<Profile>(udb: udb, log: log)
       var rocky = try manager.load(id: username)
       print(rocky)
       rocky.email = "rockywei@gmx.com"
@@ -98,15 +92,23 @@ class PerfectSSOAuthTests: XCTestCase {
     }
   }
   func testPostgreSQL() {
-    let connection = "postgresql://\(pgsql_usr):\(mysql_pwd)@\(mysql_hst)/\(mysql_dbt)"
+    let pg = PGConnection()
+    _ = pg.connectdb(pgconnection)
+    _ = pg.exec(statement: "DROP TABLE \(table)")
     do {
-      let udb = try UDBPostgreSQL<Profile>(connection: connection, table: "users", sample: profile)
+      let udb = try UDBPostgreSQL<Profile>(connection: pgconnection, table: "users", sample: profile)
       testStandard(udb: udb)
     } catch {
       XCTFail(error.localizedDescription)
     }
   }
   func testMariaDB() {
+    let mysql = MySQL()
+    guard mysql.connect(host: mysql_hst, user: mysql_usr, password: mysql_pwd, db: mysql_dbt) else {
+      XCTFail("connection failure")
+      return
+    }
+    _ = mysql.query(statement: "DROP TABLE \(table)")
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
        password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
@@ -116,6 +118,12 @@ class PerfectSSOAuthTests: XCTestCase {
     }
   }
   func testMySQL() {
+    let mysql = MySQL()
+    guard mysql.connect(host: mysql_hst, user: mysql_usr, password: mysql_pwd, db: mysql_dbt) else {
+      XCTFail("connection failure")
+      return
+    }
+    _ = mysql.query(statement: "DROP TABLE \(table)")
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
                                       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
@@ -125,6 +133,7 @@ class PerfectSSOAuthTests: XCTestCase {
     }
   }
   func testSQLite() {
+    unlink(sqlite)
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, table: table, sample: profile)
       testStandard(udb: udb)
@@ -133,6 +142,7 @@ class PerfectSSOAuthTests: XCTestCase {
     }
   }
   func testJSONDir() {
+    unlink("\(folder)/\(username).json")
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
       testStandard(udb: udb)

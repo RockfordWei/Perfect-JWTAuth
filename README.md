@@ -44,7 +44,9 @@
 
 This project is a new candidate feature of Perfect Server since version 3.
 
-This package builds with Swift Package Manager and is part of the [Perfect](https://github.com/PerfectlySoft/Perfect) project but can also be used as an independent module.
+Please use the latest version of Swift toolchain v4.0.3.
+
+This package builds with Swift Package Manager and is part of the [Perfect](https://github.com/PerfectlySoft/Perfect) project.
 
 ## Objectives
 
@@ -120,6 +122,7 @@ struct Profile: Codable {
 You can put as many properties as possible to this `Profile` design, with **NOTES** here:
 - DO **NOT** use `id`, `salt` and `shadow` as property names, they are reserved for the user authentication system.
 - The whole structure should be **FLAT** and **FINAL**, because it would map to a certain database table, so recursive or cascaded definition is invalid.
+- The length of `String` type is subject to the database driver. By default, the ANS SQL type mapping for a Swift `String` is `VARCHAR(256)` which is using by UDBMariaDB, UDBMySQL and UDBPostgreSQL, please modify source `DataworkUtility.ANSITypeOf()` if need.
 
 ### Open Database
 
@@ -132,21 +135,77 @@ SQLite|` let udb = try UDBSQLite<Profile>(path: "/path/to/db", table: "users", s
 MySQL|`let udb = try UDBMySQL<Profile>(host: "127.0.0.1", user: "root",password: "secret", database: "test", table: "users", sample: profile)`
 MariaDB|`let udb = try UDBMariaDB<Profile>(host: "127.0.0.1", user: "root",password: "secret", database: "test", table: "users", sample: profile)`
 PostgreSQL|`let udb = try UDBPostgreSQL<Profile>(connection: "postgresql://user:password@localhost/testdb", table: "users", sample: profile)`
+
+### Log Settings
+
+Login / Access control is always sensitive to log file / audition. 
+
+You can use an existing embedded log file driver `let log = FileLogger("/path/to/log/files")` or write your own log recorder by implement the `LogManager` protocol:
+
+``` swift
+public protocol LogManager {
+  func report(_ userId: String, level: LogLevel, 
+  				event: LoginManagementEvent, message: String?)
+}
+
+```
+
+**NOTE** The log protocol is assuming the implementation is thread safe and automatically time stamping. Check definition of `FileLogger` for the protocol implementation example.
+
+The default `FileLogger` can generate JSON-friendly log files by the calendar date, e.g, "/var/log/access.2017-12-27.log". There is an example of log content:
+
+``` JSON
+{"id":"f7f7e4e2-db30-4d17-a50d-c5a0ec04ecf9","timestamp":"2017-12-27 12:04:03","level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
+{"id":"d7123fcf-64f2-4a6d-9179-10e8b227d39b","timestamp":"2017-12-27 12:04:03","level":0,"userId":"rockywei","event":5,"message":"profile updated"},
+{"id":"7713e1bc-699e-4fd4-aea7-ccf337f0d4bb","timestamp":"2017-12-27 12:04:03","level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
+{"id":"3ed0fcb7-dc70-4148-a86b-e9abc2862950","timestamp":"2017-12-27 12:04:03","level":0,"userId":"rockywei","event":4,"message":"user closed"},
+{"id":"5f80cf7b-a902-4a66-9665-a885734d9005","timestamp":"2017-12-27 12:04:49","level":0,"userId":"rockywei","event":1,"message":"user registered"},
+{"id":"56cde3cd-d4bf-4af3-a852-8c6c6a2f3f85","timestamp":"2017-12-27 12:04:49","level":0,"userId":"rockywei","event":0,"message":"user logged"},
+{"id":"cb49d385-1d64-44b3-9843-f399dcfbd1ee","timestamp":"2017-12-27 12:04:49","level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
+{"id":"00f72022-0b8e-422f-9de9-82dc6059e399","timestamp":"2017-12-27 12:04:49","level":1,"userId":"rockywei","event":0,"message":"access denied"},
+```
+
+The log level and log event are defined as:
+
+``` swift
+public enum LoginManagementEvent: Int {
+  case Login = 0
+  case Registration = 1
+  case Verification = 2
+  case Logoff = 3
+  case Unregistration = 4
+  case Updating = 5
+}
+
+public enum LogLevel: Int {
+  case Event = 0
+  case Warning = 1
+  case Critical = 2
+  case Fault = 3
+}
+```
+
 ### Login Manager
 
-Now you can use the `LoginManager` class to register, login, load profile, update password and update profile, or drop users:
+A Login Manager can utilize the user database driver and log filer to control the user login:
+
+``` swift
+let man = LoginManager<Profile>(udb: udb, log: log)
+```
+
+Now you can use the `LoginManager` instance to register, login, load profile, update password and update profile, or drop users: 
 
 #### Register & Login
 
 ``` swift
-let man = LoginManager<Profile>(udb: udb)
-
 // register a user by its id
 try man.register(id: "someone", password: "secret", profile: profile)
 
 // generate a JWT token to perform single sign on
 let token = try man.login(id: "someone", password: "secret")
 ```
+
+**NOTE**: By default, both user id and password are in a length of **[5,80]** string. Please modify this restriction if need, however, all database drivers contain the `create` table SQL statement should apply this string length as well. Also id and password will be coded in URL encoding rules.
 
 The token generated by `LoginManager.login()` is a JWT for HTTP web servers.
 
@@ -171,6 +230,8 @@ You can retrieve the user profile by its id:
 try man.update(id: username, password: new_password)
 ```
 
+**NOTE**: By default, both user id and password are in a length of **[5,80]** string. Please modify this restriction if need, however, all database drivers contain the `create` table SQL statement should apply this string length as well. Also id and password will be coded in URL encoding rules.
+
 #### Update Profile
 
 ``` swift
@@ -182,6 +243,43 @@ try man.update(id: username, profile: new_profile)
 ``` swift
 try man.drop(id: username)
 ```
+
+### Customize Your Own Database Drivers
+
+If you want to implement a different database driver, just make it sure to comply the `UserDatabase` protocol:
+
+``` swift
+/// A general protocol for a user database, UDB in short.
+/// *NOTE* All implementation of UDB must be:
+/// 1. Thread Safe
+/// 2. Yield error when inserting to an existing record
+public protocol UserDatabase {
+
+  /// insert a new user record to the database
+  /// - parameter record: a user record to save
+  /// - throws: Exception
+  func insert<Profile>(_ record: UserRecord<Profile>) throws
+
+  /// retrieve a user record by its id
+  /// - parameter id: the user id
+  /// - returns: a user record instance
+  /// - throws: Exception
+  func select<Profile>(_ id: String) throws -> UserRecord<Profile>
+
+  /// update an existing user record to the database
+  /// - parameter record: a user record to save
+  /// - throws: Exception
+func update<Profile>(_ record: UserRecord<Profile>) throws
+
+  /// delete an existing user record by its id
+  /// - parameter id: the user id
+  /// - throws: Exception
+  func delete(_ id: String) throws
+}
+
+```
+
+Please feel free to check the existing implementation of UDBSQLite / UDBMySQL and UDBPostgreSQL for examples.
 
 ## Notes
 

@@ -3,8 +3,96 @@ import PerfectCrypto
 import PerfectThread
 import Foundation
 
+/// PerfectSSOAuth Exceptions
 public enum Exception: Error {
+
+  /// an error with a readable reason.
   case Fault(String)
+}
+
+/// a log file record
+public struct LogRecord: Codable {
+
+  /// record id, suggest to use uuid() to generate a unique record in the system.
+  public var id = ""
+
+  /// timestamp
+  public var timestamp = ""
+
+  /// login user id, may be "unknown" if the user name is invalid
+  public var userId = ""
+
+  /// log event level. see `enum LogLevel` for more information
+  public var level = 0
+
+  /// login events. see `enum LoginManagementEvent` for mor information
+  public var event = 0
+
+  /// an extra text message for this event, could be nil
+  public var message = ""
+}
+
+/// an embedded file logger
+public class FileLogger: LogManager {
+  internal let _lock: Threading.Lock
+  internal let _path: String
+  internal let _gmt: Bool
+  internal let encoder: JSONEncoder
+
+  /// constructor
+  /// - parameters:
+  ///   - path: a local folder to store the log file. **NOTE** the log files will be access.`\(date)`.log under the folder.
+  ///   - GMT: if using GMT, true by default. If false, the log filer will apply local times.
+  public init(_ path: String, GMT: Bool = true) {
+    _lock = Threading.Lock()
+    _path = path
+    _gmt = GMT
+    encoder = JSONEncoder()
+  }
+  internal func timestamp() -> (String, String) {
+    var now = time(nil)
+    var t = tm()
+    if _gmt {
+      gmtime_r(&now, &t)
+    } else {
+      localtime_r(&now, &t)
+    }
+    return (String(format: "%02d-%02d-%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday),
+            String(format: "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec))
+  }
+
+  /// report an event
+  /// - parameters:
+  ///   - userId: login user id, may be "unknown" if the user name is invalid
+  ///   - level: log event level. see `enum LogLevel` for more information
+  ///   - event: login events. see `enum LoginManagementEvent` for mor information
+  ///   - message: an extra text message for this event, could be nil
+  public func report(_ userId: String, level: LogLevel = .Event, event: LoginManagementEvent, message: String? = nil) {
+    let t = timestamp()
+    let fileName = "\(_path)/access.\(t.0).log"
+    var r = LogRecord()
+    r.id = UUID().string
+    r.userId = userId
+    r.level = level.rawValue
+    r.event = event.rawValue
+    r.timestamp = t.0 + " " + t.1
+    if let msg = message {
+      r.message = msg
+    }
+    _lock.doWithLock {
+      do {
+        let f = File(fileName)
+        try f.open(.append)
+        let data = try encoder.encode(r)
+        if let content = String(data: data, encoding: .utf8) {
+          try f.write(string: content + ",\n")
+          f.close()
+        }
+      } catch {
+        print("unable to log \(r)")
+      }
+    }
+  }
 }
 
 public final class DataworkUtility {
@@ -41,13 +129,9 @@ public final class DataworkUtility {
     return result
   }
 
-  public typealias KString = String
-  public typealias LongString = String
   public static func ANSITypeOf(_ swiftTypeName: String) -> String? {
     let typeMap: [String: String] = [
       "String": "VARCHAR(256)",
-      "KString": "VARCHAR(1024)",
-      "LongString": "VARCHAR(65535)",
       "[Int8]": "TEXT", "[CChar]": "TEXT", "[UInt8]": "BLOB",
       "Int": "INTEGER", "UInt": "INTEGER UNSIGNED",
       "Int8": "TINYINT", "UInt8": "TINYINT UNSIGNED",
