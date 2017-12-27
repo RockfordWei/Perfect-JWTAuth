@@ -49,8 +49,11 @@ public enum LoginManagementEvent: Int {
   /// the user is trying to close his/her record
   case Unregistration = 4
 
-  /// the use is trying to update profile or password
+  /// the user is trying to update profile or password
   case Updating = 5
+
+  /// there is a system event
+  case System = 6
 }
 
 /// log event level

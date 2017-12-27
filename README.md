@@ -50,8 +50,8 @@ This package builds with Swift Package Manager and is part of the [Perfect](http
 
 ## Objectives
 
-- independently work without ORMs (although it includes a mini ORM actually) or even databases, while it will supports all Perfect database drivers soon.
-- extremely fast, scalable and thread-safe
+- independently work without ORMs (although it includes a mini ORM actually) or even databases, while it will supports most Perfect database drivers soon.
+- extremely fast, light-weighted, scalable and thread-safe
 - Session free: a full application of JWT for the single sign-on authentication to any virtual private clouds.
 
 ## SPM Configuration Note
@@ -155,8 +155,6 @@ public protocol LogManager {
 The default `FileLogger` can generate JSON-friendly log files by the calendar date, e.g, "/var/log/access.2017-12-27.log". There is an example of log content:
 
 ``` JSON
-{"id":"f7f7e4e2-db30-4d17-a50d-c5a0ec04ecf9","timestamp":"2017-12-27 12:04:03",
-"level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
 
 {"id":"d7123fcf-64f2-4a6d-9179-10e8b227d39b","timestamp":"2017-12-27 12:04:03",
 "level":0,"userId":"rockywei","event":5,"message":"profile updated"},
@@ -178,6 +176,7 @@ The default `FileLogger` can generate JSON-friendly log files by the calendar da
 
 {"id":"00f72022-0b8e-422f-9de9-82dc6059e399","timestamp":"2017-12-27 12:04:49",
 "level":1,"userId":"rockywei","event":0,"message":"access denied"},
+
 ```
 
 The log level and log event are defined as:
@@ -294,7 +293,7 @@ func update<Profile>(_ record: UserRecord<Profile>) throws
 
 ```
 
-Please feel free to check the existing implementation of UDBSQLite / UDBMySQL and UDBPostgreSQL for examples.
+Please feel free to check the existing implementation of UDBxxx for examples.
 
 ## Notes
 

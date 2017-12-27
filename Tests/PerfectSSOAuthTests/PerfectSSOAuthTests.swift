@@ -7,8 +7,10 @@ import UDBSQLite
 import UDBMySQL
 import UDBMariaDB
 import UDBPostgreSQL
+import UDBMongoDB
 import PerfectMySQL
 import PerfectPostgreSQL
+import PerfectMongoDB
 
 struct Profile: Codable {
   public var firstName = ""
@@ -38,14 +40,16 @@ class PerfectSSOAuthTests: XCTestCase {
     ("testSQLite", testSQLite),
     ("testMySQL", testMySQL),
     ("testMariaDB", testMariaDB),
-    ("testPostgreSQL", testPostgreSQL)
+    ("testPostgreSQL", testPostgreSQL),
+    ("testMongoDB", testMongoDB)
     ]
 
   override func setUp() {
     _ = PerfectCrypto.isInitialized
   }
 
-  func testStandard(udb: UserDatabase) {
+  func testStandard(udb: UserDatabase, label: String) {
+    log.report("system", level: .Event, event: .System, message: "testing \(label)")
     do {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       try manager.register(id: username, password: godpass, profile: profile)
@@ -90,14 +94,24 @@ class PerfectSSOAuthTests: XCTestCase {
     } catch {
       XCTFail("user deleted")
     }
+    log.report("system", level: .Event, event: .System, message: "\(label) tested")
   }
+
+  func testMongoDB() {
+    do {
+      _ = try UDBMongoDB<Profile>("mongodb://maria", database: "test", document: "users")
+    } catch {
+      XCTFail(error.localizedDescription)
+    }
+  }
+
   func testPostgreSQL() {
     let pg = PGConnection()
     _ = pg.connectdb(pgconnection)
     _ = pg.exec(statement: "DROP TABLE \(table)")
     do {
       let udb = try UDBPostgreSQL<Profile>(connection: pgconnection, table: "users", sample: profile)
-      testStandard(udb: udb)
+      testStandard(udb: udb, label: "postgresql")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -112,7 +126,7 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
        password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      testStandard(udb: udb)
+      testStandard(udb: udb, label: "mariadb")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -126,8 +140,8 @@ class PerfectSSOAuthTests: XCTestCase {
     _ = mysql.query(statement: "DROP TABLE \(table)")
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
-                                      password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
-      testStandard(udb: udb)
+      password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
+      testStandard(udb: udb, label: "mysql")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -136,7 +150,7 @@ class PerfectSSOAuthTests: XCTestCase {
     unlink(sqlite)
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, table: table, sample: profile)
-      testStandard(udb: udb)
+      testStandard(udb: udb, label: "sqlite")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -145,7 +159,7 @@ class PerfectSSOAuthTests: XCTestCase {
     unlink("\(folder)/\(username).json")
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
-      testStandard(udb: udb)
+      testStandard(udb: udb, label: "jsonfile")
     } catch {
       XCTFail(error.localizedDescription)
     }
