@@ -155,14 +155,29 @@ public protocol LogManager {
 The default `FileLogger` can generate JSON-friendly log files by the calendar date, e.g, "/var/log/access.2017-12-27.log". There is an example of log content:
 
 ``` JSON
-{"id":"f7f7e4e2-db30-4d17-a50d-c5a0ec04ecf9","timestamp":"2017-12-27 12:04:03","level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
-{"id":"d7123fcf-64f2-4a6d-9179-10e8b227d39b","timestamp":"2017-12-27 12:04:03","level":0,"userId":"rockywei","event":5,"message":"profile updated"},
-{"id":"7713e1bc-699e-4fd4-aea7-ccf337f0d4bb","timestamp":"2017-12-27 12:04:03","level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
-{"id":"3ed0fcb7-dc70-4148-a86b-e9abc2862950","timestamp":"2017-12-27 12:04:03","level":0,"userId":"rockywei","event":4,"message":"user closed"},
-{"id":"5f80cf7b-a902-4a66-9665-a885734d9005","timestamp":"2017-12-27 12:04:49","level":0,"userId":"rockywei","event":1,"message":"user registered"},
-{"id":"56cde3cd-d4bf-4af3-a852-8c6c6a2f3f85","timestamp":"2017-12-27 12:04:49","level":0,"userId":"rockywei","event":0,"message":"user logged"},
-{"id":"cb49d385-1d64-44b3-9843-f399dcfbd1ee","timestamp":"2017-12-27 12:04:49","level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
-{"id":"00f72022-0b8e-422f-9de9-82dc6059e399","timestamp":"2017-12-27 12:04:49","level":1,"userId":"rockywei","event":0,"message":"access denied"},
+{"id":"f7f7e4e2-db30-4d17-a50d-c5a0ec04ecf9","timestamp":"2017-12-27 12:04:03",
+"level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
+
+{"id":"d7123fcf-64f2-4a6d-9179-10e8b227d39b","timestamp":"2017-12-27 12:04:03",
+"level":0,"userId":"rockywei","event":5,"message":"profile updated"},
+
+{"id":"7713e1bc-699e-4fd4-aea7-ccf337f0d4bb","timestamp":"2017-12-27 12:04:03",
+"level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
+
+{"id":"3ed0fcb7-dc70-4148-a86b-e9abc2862950","timestamp":"2017-12-27 12:04:03",
+"level":0,"userId":"rockywei","event":4,"message":"user closed"},
+
+{"id":"5f80cf7b-a902-4a66-9665-a885734d9005","timestamp":"2017-12-27 12:04:49",
+"level":0,"userId":"rockywei","event":1,"message":"user registered"},
+
+{"id":"56cde3cd-d4bf-4af3-a852-8c6c6a2f3f85","timestamp":"2017-12-27 12:04:49",
+"level":0,"userId":"rockywei","event":0,"message":"user logged"},
+
+{"id":"cb49d385-1d64-44b3-9843-f399dcfbd1ee","timestamp":"2017-12-27 12:04:49",
+"level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
+
+{"id":"00f72022-0b8e-422f-9de9-82dc6059e399","timestamp":"2017-12-27 12:04:49",
+"level":1,"userId":"rockywei","event":0,"message":"access denied"},
 ```
 
 The log level and log event are defined as:
