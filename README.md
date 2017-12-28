@@ -66,15 +66,15 @@ For example,  `export DATABASE_DRIVER=SQLite` will apply a `PerfectSQLite` drive
 
 Currently configurable database drivers are:
 
-Driver Name| Description
-------------|--------------
-JSONFile|a native JSON file based user database
-SQLite|Perfect SQLite
-MySQL|Perfect MySQL
-MariaDB|Perfect MariaDB
-PostgreSQL| Perfect PostgreSQL
-MongoDB| Coming Soon
-Redis| Coming Soon
+Driver Name| Description|Example Configuration
+------------|--------------|-----------
+JSONFile|a native JSON file based user database|export DATABASE_DRIVER=JSONFile
+SQLite|Perfect SQLite|export DATABASE_DRIVER=SQLite
+MySQL|Perfect MySQL|export DATABASE_DRIVER=MySQL
+MariaDB|Perfect MariaDB|export DATABASE_DRIVER=MariaDB
+PostgreSQL| Perfect PostgreSQL|export DATABASE_DRIVER=PostgreSQL
+MongoDB| Coming Soon|export DATABASE_DRIVER=MongoDB
+Redis| Coming Soon|export DATABASE_DRIVER=Redis
 
 ### Local Mirror
 
