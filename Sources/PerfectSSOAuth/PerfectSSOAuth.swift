@@ -307,29 +307,7 @@ public class LoginManager<Profile> where Profile: Codable {
                     message: "access denied")
         throw Exception.fault("access denied")
     }
-    let now = time(nil)
-    let expiration = now + timeout
-    let claims:[String: Any] = [
-        "iss":_managerID, "sub": subject, "aud": id,
-        "exp": expiration, "nbf": now, "iat": now, "jit": UUID().string
-      ]
-
-    guard let jwt = JWTCreator(payload: claims) else {
-      _log.report(id, level: .critical, event: .login,
-                  message: "token failure")
-      throw Exception.fault("token failure")
-    }
-
-    let ret: String
-    do {
-      ret = try jwt.sign(alg: _alg, key: u.salt, headers: headers)
-    } catch (let err) {
-      _log.report(id, level: .critical, event: .login,
-                  message: "jwt signature failure: \(err)")
-      throw err
-    }
-    _log.report(id, level: .event, event: .login, message: "user logged")
-    return ret
+    return try self.renew(u: u, subject: subject, timeout: timeout, headers: headers)
   }
 
   /// verify a jwt token. When a logged user is coming back to access a certain resource,
@@ -338,9 +316,8 @@ public class LoginManager<Profile> where Profile: Codable {
   /// - parameters:
   ///   - id: the user id
   ///   - token: the JWT token that the user is presenting.
-  ///   - renew: if true, the function will also return a new token.
   /// - throws: Exception.
-  public func verify(id: String, token: String, renew: Bool = false) throws -> String? {
+  public func verify(id: String, token: String) throws {
     guard let jwt = JWTVerifier(token) else {
       _log.report(id, level: .warning, event: .verification,
                   message: "jwt verification failure")
@@ -369,16 +346,79 @@ public class LoginManager<Profile> where Profile: Codable {
                   message: "jwt verification failure: \(token)")
       throw Exception.fault("jwt verification failure")
     }
-    guard let iss = jwt.payload["iss"] as? String, iss == _managerID,
-      let aud = jwt.payload["aud"] as? String, aud == id,
-      let timeout = jwt.payload["exp"] as? Int, now <= timeout,
-      let nbf = jwt.payload["nbf"] as? Int, nbf <= now else {
+    guard let iss = jwt.payload["iss"] as? String,
+      iss == _managerID,
+      let aud = jwt.payload["aud"] as? String,
+      aud == id,
+      let timeout = jwt.payload["exp"] as? Int,
+      now <= timeout,
+      let nbf = jwt.payload["nbf"] as? Int,
+      nbf <= now else {
         _log.report(id, level: .warning, event: .verification,
                     message: "jwt invalid payload: \(jwt.payload)")
         throw Exception.fault("token failure")
     }
     _log.report(id, level: .event, event: .verification, message: "token verified")
-    return nil
+  }
+
+  /// generate a jwt token. When a logged user is coming back to access a certain resource,
+  /// use this function to alloc a token to the user
+  /// - parameters:
+  ///   - u: the user record
+  ///   - subject: optional, subject to issue a jwt token, empty by default
+  ///   - timeout: optional, jwt token valid period, in seconds. 3600 by default (one hour)
+  ///   - headers: optional, extra headers to issue, empty by default.
+  /// - throws: Exception
+  /// - returns: a valid jwt token
+  internal func renew(u: U,
+                      subject: String = "", timeout: Int = 3600,
+                      headers: [String:Any] = [:]) throws -> String {
+    let now = time(nil)
+    let expiration = now + timeout
+    let claims:[String: Any] = [
+      "iss":_managerID, "sub": subject, "aud": u.id,
+      "exp": expiration, "nbf": now, "iat": now, "jit": UUID().string
+    ]
+
+    guard let jwt = JWTCreator(payload: claims) else {
+      _log.report(u.id, level: .critical, event: .login,
+                  message: "token failure")
+      throw Exception.fault("token failure")
+    }
+
+    let ret: String
+    do {
+      ret = try jwt.sign(alg: _alg, key: u.salt, headers: headers)
+    } catch (let err) {
+      _log.report(u.id, level: .critical, event: .login,
+                  message: "jwt signature failure: \(err)")
+      throw err
+    }
+    _log.report(u.id, level: .event, event: .login, message: "user logged")
+    return ret
+  }
+
+  /// generate a jwt token. When a logged user is coming back to access a certain resource,
+  /// use this function to alloc a token to the user
+  /// - parameters:
+  ///   - id: the user id
+  ///   - subject: optional, subject to issue a jwt token, empty by default
+  ///   - timeout: optional, jwt token valid period, in seconds. 3600 by default (one hour)
+  ///   - headers: optional, extra headers to issue, empty by default.
+  /// - throws: Exception
+  /// - returns: a valid jwt token
+  public func renew(id: String,
+                    subject: String = "", timeout: Int = 3600,
+                    headers: [String:Any] = [:]) throws -> String {
+    let u: U
+    do {
+      u = try _select(id)
+    } catch Exception.fault(let message) {
+      _log.report(id, level: .warning, event: .verification,
+                  message: "unregistered user record")
+      throw Exception.fault(message)
+    }
+    return try self.renew(u: u, subject: subject, timeout: timeout, headers: headers)
   }
 
   /// load a user profile by its id
