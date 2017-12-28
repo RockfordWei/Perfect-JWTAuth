@@ -49,7 +49,7 @@ class PerfectSSOAuthTests: XCTestCase {
   }
 
   func testStandard(udb: UserDatabase, label: String) {
-    log.report("system", level: .Event, event: .System, message: "testing \(label)")
+    log.report("system", level: .event, event: .system, message: "testing \(label)")
     do {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       try manager.register(id: username, password: godpass, profile: profile)
@@ -62,7 +62,7 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       _ = try manager.login(id: username, password: badpass)
-    } catch Exception.Fault(let reason) {
+    } catch Exception.fault(let reason) {
       print("expected error:", reason)
     } catch {
       XCTFail(error.localizedDescription)
@@ -71,7 +71,7 @@ class PerfectSSOAuthTests: XCTestCase {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       let token = try manager.login(id: username, password: godpass)
       print(token)
-      try manager.verify(id: username, token: token)
+      _ = try manager.verify(id: username, token: token)
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -94,7 +94,7 @@ class PerfectSSOAuthTests: XCTestCase {
     } catch {
       XCTFail("user deleted")
     }
-    log.report("system", level: .Event, event: .System, message: "\(label) tested")
+    log.report("system", level: .event, event: .system, message: "\(label) tested")
   }
 
   func testMongoDB() {

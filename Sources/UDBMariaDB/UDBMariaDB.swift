@@ -20,7 +20,7 @@ extension MySQLStmt {
       self.bindParam(y, length: y.count)
     } else {
       let tp = type(of: x)
-      throw Exception.Fault("incompatible type: \(tp)")
+      throw Exception.fault("incompatible type: \(tp)")
     }
   }
 }
@@ -42,16 +42,16 @@ public class UDBMariaDB<Profile>: UserDatabase {
     decoder = JSONDecoder()
     guard db.setOption(.MYSQL_SET_CHARSET_NAME, "utf8mb4"),
       db.connect(host: host, user: user, password: password, db: database) else {
-        throw Exception.Fault("connection failure")
+        throw Exception.fault("connection failure")
     }
     self.table = table
     let properties = try DataworkUtility.explainProperties(of: sample)
     guard !properties.isEmpty else {
-      throw Exception.Fault("invalid profile structure")
+      throw Exception.fault("invalid profile structure")
     }
     fields = try properties.map { s -> Field in
       guard let tp = DataworkUtility.ANSITypeOf(s.type) else {
-        throw Exception.Fault("incompatible type name: \(s.type)")
+        throw Exception.fault("incompatible type name: \(s.type)")
       }
       return Field(name: s.name, type: tp)
     }
@@ -63,7 +63,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     salt VARCHAR(256), shadow VARCHAR(1024), \(fieldDescription))
     """
     guard db.query(statement: sql) else {
-      throw Exception.Fault("table creation failure")
+      throw Exception.fault("table creation failure")
     }
   }
 
@@ -78,11 +78,11 @@ public class UDBMariaDB<Profile>: UserDatabase {
       let sql = "SELECT id FROM \(self.table) WHERE id = ? LIMIT 1"
       guard stmt.prepare(statement:sql)
         else {
-          throw Exception.Fault(db.errorMessage())
+          throw Exception.fault(db.errorMessage())
       }
       stmt.bindParam(id)
       guard stmt.execute() else {
-        throw Exception.Fault(db.errorMessage())
+        throw Exception.fault(db.errorMessage())
       }
       return stmt.results().numRows
       }) ?? 0
@@ -91,13 +91,13 @@ public class UDBMariaDB<Profile>: UserDatabase {
 
   public func insert<Profile>(_ record: UserRecord<Profile>) throws {
     if exists(record.id) {
-      throw Exception.Fault("user has already registered")
+      throw Exception.fault("user has already registered")
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       let dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.Fault("json encoding failure")
+        throw Exception.fault("json encoding failure")
     }
     try lock.doWithLock {
       let properties:[String] = fields.map { $0.name }
@@ -110,7 +110,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
       defer { stmt.close() }
       guard stmt.prepare(statement: sql)
         else {
-          throw Exception.Fault(db.errorMessage())
+          throw Exception.fault(db.errorMessage())
       }
       stmt.bindParam(record.id)
       stmt.bindParam(record.salt)
@@ -120,20 +120,20 @@ public class UDBMariaDB<Profile>: UserDatabase {
         try stmt.bindParameter(x)
       }
       guard stmt.execute() else {
-        throw Exception.Fault(db.errorMessage())
+        throw Exception.fault(db.errorMessage())
       }
     }
   }
 
   public func update<Profile>(_ record: UserRecord<Profile>) throws {
     guard exists(record.id) else {
-      throw Exception.Fault("user does not exists")
+      throw Exception.fault("user does not exists")
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       let dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.Fault("json encoding failure")
+        throw Exception.fault("json encoding failure")
     }
     try lock.doWithLock {
       let properties:[String] = fields.map { $0.name }
@@ -143,7 +143,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
       guard stmt.prepare(statement: sql) else {
-        throw Exception.Fault(db.errorMessage())
+        throw Exception.fault(db.errorMessage())
       }
       stmt.bindParam(record.salt)
       stmt.bindParam(record.shadow)
@@ -153,7 +153,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
       }
       stmt.bindParam(record.id)
       guard stmt.execute() else {
-        throw Exception.Fault(db.errorMessage())
+        throw Exception.fault(db.errorMessage())
       }
     }
   }
@@ -168,10 +168,10 @@ public class UDBMariaDB<Profile>: UserDatabase {
       defer { stmt.close() }
       guard stmt.prepare(statement: sql)
         else {
-          throw Exception.Fault(self.db.errorMessage())
+          throw Exception.fault(self.db.errorMessage())
       }
       stmt.bindParam(id)
-      guard stmt.execute() else { throw Exception.Fault(self.db.errorMessage())}
+      guard stmt.execute() else { throw Exception.fault(self.db.errorMessage())}
       let fetched = stmt.results().forEachRow { rec in
         let _id = rec[0] as? String
         let _salt = rec[1] as? String
@@ -197,14 +197,14 @@ public class UDBMariaDB<Profile>: UserDatabase {
           debugPrint("json failure")
         }
       }
-      guard fetched, let v = u else { throw Exception.Fault(self.db.errorMessage())}
+      guard fetched, let v = u else { throw Exception.fault(self.db.errorMessage())}
       return v
     }
   }
 
   public func delete(_ id: String) throws {
     guard exists(id) else {
-      throw Exception.Fault("user does not exist")
+      throw Exception.fault("user does not exist")
     }
     try lock.doWithLock {
       let stmt = MySQLStmt(db)
@@ -212,11 +212,11 @@ public class UDBMariaDB<Profile>: UserDatabase {
       let sql = "DELETE FROM \(self.table) WHERE id = ?"
       guard stmt.prepare(statement: sql)
         else {
-          throw Exception.Fault(db.errorMessage())
+          throw Exception.fault(db.errorMessage())
       }
       stmt.bindParam(id)
       guard stmt.execute() else {
-        throw Exception.Fault(db.errorMessage())
+        throw Exception.fault(db.errorMessage())
       }
     }
   }

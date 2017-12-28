@@ -27,7 +27,7 @@ public class UDBSQLite<Profile>: UserDatabase {
     self.table = table
     let properties = try DataworkUtility.explainProperties(of: sample)
     guard !properties.isEmpty else {
-      throw Exception.Fault("invalid profile structure")
+      throw Exception.fault("invalid profile structure")
     }
     fields = try properties.map { s -> Field in
       let tp = s.type
@@ -41,7 +41,7 @@ public class UDBSQLite<Profile>: UserDatabase {
       } else if tp == "String" {
         typeName = "TEXT"
       } else {
-        throw Exception.Fault("incompatible type name: \(tp)")
+        throw Exception.fault("incompatible type name: \(tp)")
       }
       return Field(name: s.name, type: typeName)
     }
@@ -76,13 +76,13 @@ public class UDBSQLite<Profile>: UserDatabase {
 
   public func insert<Profile>(_ record: UserRecord<Profile>) throws {
     if exists(record.id) {
-      throw Exception.Fault("user has already registered")
+      throw Exception.fault("user has already registered")
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       let dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.Fault("json encoding failure")
+        throw Exception.fault("json encoding failure")
     }
     try lock.doWithLock {
       let properties:[String] = fields.map { $0.name }
@@ -113,7 +113,7 @@ public class UDBSQLite<Profile>: UserDatabase {
             try stmt.bind(position: j, s)
             break
           default:
-            throw Exception.Fault("incompatible value type")
+            throw Exception.fault("incompatible value type")
           }
         }
       }
@@ -145,7 +145,7 @@ public class UDBSQLite<Profile>: UserDatabase {
           case "REAL":
             dic[fname] = rec.columnDouble(position: j)
           default:
-            throw Exception.Fault("unexpected column type: \(fields[i].type)")
+            throw Exception.fault("unexpected column type: \(fields[i].type)")
           }
         }
         let json = try dic.jsonEncodedString()
@@ -154,7 +154,7 @@ public class UDBSQLite<Profile>: UserDatabase {
         u = UserRecord(id: id, salt: salt, shadow: shadow, profile: profile)
       }
       guard let v = u else {
-        throw Exception.Fault("record not found")
+        throw Exception.fault("record not found")
       }
       return v
     }
@@ -162,7 +162,7 @@ public class UDBSQLite<Profile>: UserDatabase {
 
   public func delete(_ id: String) throws {
     guard exists(id) else {
-      throw Exception.Fault("user does not exists")
+      throw Exception.fault("user does not exists")
     }
     try lock.doWithLock {
       let sql = "DELETE FROM \(table) WHERE id = ?"
@@ -175,13 +175,13 @@ public class UDBSQLite<Profile>: UserDatabase {
 
   public func update<Profile>(_ record: UserRecord<Profile>) throws {
     guard exists(record.id) else {
-      throw Exception.Fault("user does not exists")
+      throw Exception.fault("user does not exists")
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       let dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.Fault("json encoding failure")
+        throw Exception.fault("json encoding failure")
     }
     try lock.doWithLock {
       let columns:[String] = fields.map { "\($0.name) = ?" }
@@ -211,7 +211,7 @@ public class UDBSQLite<Profile>: UserDatabase {
             let s = dic[f.name] as? [Int8] ?? []
             try stmt.bind(position:j, s)
           default:
-            throw Exception.Fault("incompatible value type")
+            throw Exception.fault("incompatible value type")
           }
         }
         try stmt.bind(position: fields.count + 3, record.id)

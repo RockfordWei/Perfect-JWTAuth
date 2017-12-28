@@ -18,19 +18,19 @@ public class UDBMongoDB<Profile> {
     let status = client.serverStatus()
     switch status {
     case .error(let domain, let code, let message):
-      throw Exception.Fault("\(domain) \(code) \(message)")
+      throw Exception.fault("\(domain) \(code) \(message)")
     case .replyDoc(_):
       break
     default:
-      throw Exception.Fault("unknow status: \(status)")
+      throw Exception.fault("unknow status: \(status)")
     }
     db = client.getDatabase(name: database)
     guard db.name() == database else {
-      throw Exception.Fault("unexpected database name: '\(db.name())' != '\(database)'")
+      throw Exception.fault("unexpected database name: '\(db.name())' != '\(database)'")
     }
     _ = db.createCollection(name: document, options: nil)
     guard let collection = db.getCollection(name: document) else {
-      throw Exception.Fault("document table \(document) is not ready")
+      throw Exception.fault("document table \(document) is not ready")
     }
     users = collection
   }

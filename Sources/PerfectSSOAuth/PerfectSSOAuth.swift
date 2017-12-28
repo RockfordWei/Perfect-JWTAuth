@@ -35,41 +35,41 @@ public struct UserRecord<Profile>: Codable where Profile: Codable {
 public enum LoginManagementEvent: Int {
 
   /// the user is trying to log in
-  case Login = 0
+  case login = 0
 
   /// the user is trying to register
-  case Registration = 1
+  case registration = 1
 
   /// the user is presenting a JWT token to get access
-  case Verification = 2
+  case verification = 2
 
   /// the use is trying to log out - may be skipped - empty jwt will do this
-  case Logoff = 3
+  case logoff = 3
 
   /// the user is trying to close his/her record
-  case Unregistration = 4
+  case unregistration = 4
 
   /// the user is trying to update profile or password
-  case Updating = 5
+  case updating = 5
 
   /// there is a system event
-  case System = 6
+  case system = 6
 }
 
 /// log event level
 public enum LogLevel: Int {
 
   /// a regular event
-  case Event = 0
+  case event = 0
 
   /// some unusual user behaviours
-  case Warning = 1
+  case warning = 1
 
   /// the operation could not be completed internally
-  case Critical = 2
+  case critical = 2
 
   /// system failure
-  case Fault = 3
+  case fault = 3
 }
 
 /// general interface of a log file writer
@@ -132,7 +132,7 @@ public class LoginManager<Profile> where Profile: Codable {
   internal let _sizeLimitOfCredential: CountableClosedRange<Int>
   internal let _managerID: String
   internal let _alg: JWT.Alg
-  internal let _log: LogManager?
+  internal let _log: LogManager
 
   typealias U = UserRecord<Profile>
   internal let _insert: (_ record: U ) throws -> Void
@@ -152,7 +152,7 @@ public class LoginManager<Profile> where Profile: Codable {
   ///   - sizeLimitOfCredential: a closed range of password length, [5, 80] by default.
   ///   - alg: JWT token generation algorithm, HS256 by default
   ///   - udb: a user database to attache
-  ///   - log: a log manager if applicable, nil by default.
+  ///   - log: a log manager if applicable, default nil for logging to the console.
   public init(cipher: Cipher = .aes_256_cbc, keyIterations: Int = 1024,
               digest: Digest = .md5, saltLength: Int = 16,
               sizeLimitOfCredential: CountableClosedRange<Int> = 5...80,
@@ -165,7 +165,11 @@ public class LoginManager<Profile> where Profile: Codable {
     _saltLength = saltLength
     _sizeLimitOfCredential = sizeLimitOfCredential
     _alg = alg
-    _log = log
+    if let lg = log {
+      _log = lg
+    } else {
+      _log = StdLogger()
+    }
     _managerID = UUID().string
     _insert = udb.insert
     _select = udb.select
@@ -185,35 +189,27 @@ public class LoginManager<Profile> where Profile: Codable {
     guard id.count.inRange(of: _sizeLimitOfCredential),
       password.count.inRange(of: _sizeLimitOfCredential),
       !usr.isEmpty, !pwd.isEmpty else {
-        if let lg = _log {
-          lg.report("unknown", level: .Warning, event: .Registration,
+        _log.report("unknown", level: .warning, event: .registration,
           message: "invalid registration attempt '\(id)'/'\(password)'")
-        }
-        throw Exception.Fault("invalid login")
+        throw Exception.fault("invalid login")
     }
     guard let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
       let shadow = usr.encrypt(_cipher, password: pwd, salt: salt)
       else {
-        if let lg = _log {
-          lg.report(id, level: .Critical, event: .Registration,
+        _log.report(id, level: .critical, event: .registration,
                     message: "unable to register '\(id)'/'\(password)' because of encryption failure")
-        }
-        throw Exception.Fault("crypto failure")
+        throw Exception.fault("crypto failure")
     }
     let u = UserRecord<Profile>(id: usr, salt: salt, shadow: shadow, profile: profile)
     do {
       try _insert(u)
-    } catch Exception.Fault(let message) {
-      if let lg = _log {
-        lg.report(id, level: .Critical, event: .Registration,
+    } catch Exception.fault(let message) {
+      _log.report(id, level: .critical, event: .registration,
                   message: "unable to register '\(id)'/'\(password)': \(message)")
-      }
-      throw Exception.Fault(message)
+      throw Exception.fault(message)
     }
-    if let lg = _log {
-      lg.report(id, level: .Event, event: .Registration, message: "user registered")
-    }
+    _log.report(id, level: .event, event: .registration, message: "user registered")
   }
 
   /// update a user's password. Would log an updating password event on an available log filer.
@@ -231,27 +227,21 @@ public class LoginManager<Profile> where Profile: Codable {
       let salt = String(validatingUTF8: random),
       let shadow = usr.encrypt(_cipher, password: pwd, salt: salt)
       else {
-        if let lg = _log {
-          lg.report("unknown", level: .Warning, event: .Updating,
+        _log.report("unknown", level: .warning, event: .updating,
                     message: "invalid update attempt '\(id)'/'\(password)'")
-        }
-        throw Exception.Fault("crypto failure")
+        throw Exception.fault("crypto failure")
     }
     do {
       var u = try self._select(id)
       u.salt = salt
       u.shadow = shadow
       try self._update(u)
-    } catch Exception.Fault(let message) {
-      if let lg = _log {
-        lg.report(id, level: .Critical, event: .Updating,
+    } catch Exception.fault(let message) {
+      _log.report(id, level: .critical, event: .updating,
                   message: "unable to update '\(id)'/'\(password)': \(message)")
-      }
-      throw Exception.Fault(message)
+      throw Exception.fault(message)
     }
-    if let lg = _log {
-      lg.report(id, level: .Event, event: .Updating, message: "password updated")
-    }
+    _log.report(id, level: .event, event: .updating, message: "password updated")
   }
 
   /// update a user's profile. Would log an updating profile event on an available log filer.
@@ -264,26 +254,20 @@ public class LoginManager<Profile> where Profile: Codable {
     guard id.count.inRange(of: _sizeLimitOfCredential),
       !usr.isEmpty
       else {
-        if let lg = _log {
-          lg.report("unknown", level: .Warning, event: .Updating,
+        _log.report("unknown", level: .warning, event: .updating,
                     message: "invalid update attempt '\(id)'")
-        }
-        throw Exception.Fault("invalid login")
+        throw Exception.fault("invalid login")
     }
     do {
       var u = try self._select(id)
       u.profile = profile
       try self._update(u)
-    } catch Exception.Fault(let message) {
-      if let lg = _log {
-        lg.report(id, level: .Critical, event: .Updating,
+    } catch Exception.fault(let message) {
+      _log.report(id, level: .critical, event: .updating,
                   message: "unable to update '\(id)': \(message)")
-      }
-      throw Exception.Fault(message)
+      throw Exception.fault(message)
     }
-    if let lg = _log {
-      lg.report(id, level: .Event, event: .Updating, message: "profile updated")
-    }
+    _log.report(id, level: .event, event: .updating, message: "profile updated")
   }
 
   /// perform a user login to generate and return a valid jwt token.
@@ -303,31 +287,25 @@ public class LoginManager<Profile> where Profile: Codable {
     guard id.count.inRange(of: _sizeLimitOfCredential),
     password.count.inRange(of: _sizeLimitOfCredential),
       !usr.isEmpty, !pwd.isEmpty else {
-        if let lg = _log {
-          lg.report("unknown", level: .Warning, event: .Login,
+        _log.report("unknown", level: .warning, event: .login,
                     message: "invalid login attempt '\(id)'/'\(password)'")
-        }
-        throw Exception.Fault("invalid login")
+        throw Exception.fault("invalid login")
     }
     let u: U
     do {
       u = try _select(usr)
-    } catch Exception.Fault(let message) {
-      if let lg = _log {
-        lg.report(id, level: .Warning, event: .Login,
+    } catch Exception.fault(let message) {
+      _log.report(id, level: .warning, event: .login,
                   message: "unregistered user record")
-      }
-      throw Exception.Fault(message)
+      throw Exception.fault(message)
     }
     guard
       let decodedUsername = u.shadow.decrypt(_cipher, password: pwd, salt: u.salt),
       decodedUsername == usr
       else {
-        if let lg = _log {
-          lg.report(id, level: .Warning, event: .Login,
+        _log.report(id, level: .warning, event: .login,
                     message: "access denied")
-        }
-        throw Exception.Fault("access denied")
+        throw Exception.fault("access denied")
     }
     let now = time(nil)
     let expiration = now + timeout
@@ -337,26 +315,20 @@ public class LoginManager<Profile> where Profile: Codable {
       ]
 
     guard let jwt = JWTCreator(payload: claims) else {
-      if let lg = _log {
-        lg.report(id, level: .Critical, event: .Login,
+      _log.report(id, level: .critical, event: .login,
                   message: "token failure")
-      }
-      throw Exception.Fault("token failure")
+      throw Exception.fault("token failure")
     }
 
     let ret: String
     do {
       ret = try jwt.sign(alg: _alg, key: u.salt, headers: headers)
     } catch (let err) {
-      if let lg = _log {
-        lg.report(id, level: .Critical, event: .Login,
+      _log.report(id, level: .critical, event: .login,
                   message: "jwt signature failure: \(err)")
-      }
       throw err
     }
-    if let lg = _log {
-      lg.report(id, level: .Event, event: .Login, message: "user logged")
-    }
+    _log.report(id, level: .event, event: .login, message: "user logged")
     return ret
   }
 
@@ -366,57 +338,47 @@ public class LoginManager<Profile> where Profile: Codable {
   /// - parameters:
   ///   - id: the user id
   ///   - token: the JWT token that the user is presenting.
+  ///   - renew: if true, the function will also return a new token.
   /// - throws: Exception.
-  public func verify(id: String, token: String) throws {
+  public func verify(id: String, token: String, renew: Bool = false) throws -> String? {
     guard let jwt = JWTVerifier(token) else {
-      if let lg = _log {
-        lg.report(id, level: .Warning, event: .Verification,
+      _log.report(id, level: .warning, event: .verification,
                   message: "jwt verification failure")
-      }
-      throw Exception.Fault("jwt verification failure")
+      throw Exception.fault("jwt verification failure")
     }
     let usr = id.stringByEncodingURL
     guard id.count.inRange(of: _sizeLimitOfCredential),
       !usr.isEmpty else {
-        if let lg = _log {
-          lg.report("unknown", level: .Warning, event: .Verification,
+        _log.report("unknown", level: .warning, event: .verification,
                     message: "invalid login verification: '\(id)'/'\(token)'")
-        }
-        throw Exception.Fault("invalid login verification")
+        throw Exception.fault("invalid login verification")
     }
     let u: U
     do {
       u = try _select(usr)
-    } catch Exception.Fault(let message) {
-      if let lg = _log {
-        lg.report(id, level: .Warning, event: .Verification,
+    } catch Exception.fault(let message) {
+      _log.report(id, level: .warning, event: .verification,
                   message: "unregistered user record")
-      }
-      throw Exception.Fault(message)
+      throw Exception.fault(message)
     }
     let now = time(nil)
     do {
       try jwt.verify(algo: _alg, key: HMACKey(u.salt))
     } catch {
-      if let lg = _log {
-        lg.report(id, level: .Warning, event: .Verification,
+      _log.report(id, level: .warning, event: .verification,
                   message: "jwt verification failure: \(token)")
-      }
-      throw Exception.Fault("jwt verification failure")
+      throw Exception.fault("jwt verification failure")
     }
     guard let iss = jwt.payload["iss"] as? String, iss == _managerID,
       let aud = jwt.payload["aud"] as? String, aud == id,
       let timeout = jwt.payload["exp"] as? Int, now <= timeout,
       let nbf = jwt.payload["nbf"] as? Int, nbf <= now else {
-        if let lg = _log {
-          lg.report(id, level: .Warning, event: .Verification,
+        _log.report(id, level: .warning, event: .verification,
                     message: "jwt invalid payload: \(jwt.payload)")
-        }
-        throw Exception.Fault("token failure")
+        throw Exception.fault("token failure")
     }
-    if let lg = _log {
-      lg.report(id, level: .Event, event: .Verification, message: "token verified")
-    }
+    _log.report(id, level: .event, event: .verification, message: "token verified")
+    return nil
   }
 
   /// load a user profile by its id
@@ -426,17 +388,13 @@ public class LoginManager<Profile> where Profile: Codable {
   public func load(id: String) throws -> Profile {
     do {
       let p = try _select(id).profile
-      if let lg = _log {
-        lg.report(id, level: .Event, event: .Login, message: "retrieving user record")
-      }
+      _log.report(id, level: .event, event: .login, message: "retrieving user record")
       return p
-    } catch Exception.Fault(let message){
+    } catch Exception.fault(let message){
       let msg = "unable to load user record: \(message)"
-      if let lg = _log {
-        lg.report(id, level: .Warning, event: .Login,
+      _log.report(id, level: .warning, event: .login,
                   message: msg)
-      }
-      throw Exception.Fault(msg)
+      throw Exception.fault(msg)
     }
   }
   
@@ -446,16 +404,12 @@ public class LoginManager<Profile> where Profile: Codable {
   public func drop(id: String) throws {
     do {
       try _delete(id)
-      if let lg = _log {
-        lg.report(id, level: .Event, event: .Unregistration, message: "user closed")
-      }
-    } catch Exception.Fault(let message){
+      _log.report(id, level: .event, event: .unregistration, message: "user closed")
+    } catch Exception.fault(let message){
       let msg = "unable to remove user record: \(message)"
-      if let lg = _log {
-        lg.report(id, level: .Warning, event: .Unregistration,
+      _log.report(id, level: .warning, event: .unregistration,
                   message: msg)
-      }
-      throw Exception.Fault(msg)
+      throw Exception.fault(msg)
     }
   }
 }

@@ -7,7 +7,7 @@ import Foundation
 public enum Exception: Error {
 
   /// an error with a readable reason.
-  case Fault(String)
+  case fault(String)
 }
 
 /// a log file record
@@ -32,6 +32,27 @@ public struct LogRecord: Codable {
   public var message = ""
 }
 
+/// a placeholder for log to stdout
+public final class StdLogger: LogManager {
+
+  public static func timestamp(_ gmt: Bool = false) -> (String, String) {
+    var now = time(nil)
+    var t = tm()
+    if gmt {
+      gmtime_r(&now, &t)
+    } else {
+      localtime_r(&now, &t)
+    }
+    return (String(format: "%02d-%02d-%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday),
+            String(format: "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec))
+  }
+
+  public func report(_ userId: String, level: LogLevel, event: LoginManagementEvent, message: String?) {
+    let t = StdLogger.timestamp()
+    print(t.0, t.1, userId, level, event, message ?? "")
+  }
+}
+
 /// an embedded file logger
 public class FileLogger: LogManager {
   internal let _lock: Threading.Lock
@@ -49,17 +70,7 @@ public class FileLogger: LogManager {
     _gmt = GMT
     encoder = JSONEncoder()
   }
-  internal func timestamp() -> (String, String) {
-    var now = time(nil)
-    var t = tm()
-    if _gmt {
-      gmtime_r(&now, &t)
-    } else {
-      localtime_r(&now, &t)
-    }
-    return (String(format: "%02d-%02d-%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday),
-            String(format: "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec))
-  }
+
 
   /// report an event
   /// - parameters:
@@ -67,8 +78,8 @@ public class FileLogger: LogManager {
   ///   - level: log event level. see `enum LogLevel` for more information
   ///   - event: login events. see `enum LoginManagementEvent` for mor information
   ///   - message: an extra text message for this event, could be nil
-  public func report(_ userId: String, level: LogLevel = .Event, event: LoginManagementEvent, message: String? = nil) {
-    let t = timestamp()
+  public func report(_ userId: String, level: LogLevel = .event, event: LoginManagementEvent, message: String? = nil) {
+    let t = StdLogger.timestamp(self._gmt)
     let fileName = "\(_path)/access.\(t.0).log"
     var r = LogRecord()
     r.id = UUID().string
@@ -118,7 +129,7 @@ public final class DataworkUtility {
     guard let json = String.init(bytes: data, encoding: .utf8),
       let payload = try json.jsonDecode() as? [String:Any]
       else {
-        throw Exception.Fault("json decoding failure")
+        throw Exception.fault("json decoding failure")
     }
     var result:[Field] = []
     for (key, value) in payload {

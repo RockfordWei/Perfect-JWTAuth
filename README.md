@@ -78,7 +78,7 @@ Redis| Coming Soon|export DATABASE_DRIVER=Redis
 
 ### Local Mirror
 
-This library is using `URL_PERFECT` to work with [Perfect Local Mirror](https://github.com/PerfectlySoft/Perfect-LocalMirror) to speed up building process.
+This library can use [Perfect Local Mirror](https://github.com/PerfectlySoft/Perfect-LocalMirror) with `URL_PERFECT` to speed up the building process.
 
 For example, `export URL_PERFECT=/private/var/perfect` will help build if install the Perfect Local Mirror by default.
 
@@ -121,6 +121,7 @@ struct Profile: Codable {
 
 You can put as many properties as possible to this `Profile` design, with **NOTES** here:
 - DO **NOT** use `id`, `salt` and `shadow` as property names, they are reserved for the user authentication system.
+- Other reserved key words in SQL / Swift should be avoided, either, such as "from / where / order ..."
 - The whole structure should be **FLAT** and **FINAL**, because it would map to a certain database table, so recursive or cascaded definition is invalid.
 - The length of `String` type is subject to the database driver. By default, the ANS SQL type mapping for a Swift `String` is `VARCHAR(256)` which is using by UDBMariaDB, UDBMySQL and UDBPostgreSQL, please modify source `DataworkUtility.ANSITypeOf()` if need.
 
@@ -205,6 +206,12 @@ A Login Manager can utilize the user database driver and log filer to control th
 
 ``` swift
 let man = LoginManager<Profile>(udb: udb, log: log)
+```
+
+Certainly, you can skip the log system if no need, which will log to the console indeed:
+
+``` swift
+let man = LoginManager<Profile>(udb: udb)
 ```
 
 Now you can use the `LoginManager` instance to register, login, load profile, update password and update profile, or drop users: 

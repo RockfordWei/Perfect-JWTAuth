@@ -19,7 +19,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     db = PGConnection()
     let status = db.connectdb(connection)
     guard status == .ok else {
-      throw Exception.Fault("Connection Failure, please check the connection string " + connection)
+      throw Exception.fault("Connection Failure, please check the connection string " + connection)
     }
     lock = Threading.Lock()
     self.table = table
@@ -27,11 +27,11 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     decoder = JSONDecoder()
     let properties = try DataworkUtility.explainProperties(of: sample)
     guard !properties.isEmpty else {
-      throw Exception.Fault("invalid profile structure")
+      throw Exception.fault("invalid profile structure")
     }
     fields = try properties.map { s -> Field in
       guard let tp = DataworkUtility.ANSITypeOf(s.type) else {
-        throw Exception.Fault("incompatible type name: \(s.type)")
+        throw Exception.fault("incompatible type name: \(s.type)")
       }
       return Field(name: s.name, type: tp)
     }
@@ -47,7 +47,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.Fault(r)
+      throw Exception.fault(r)
     }
   }
 
@@ -57,13 +57,13 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
 
   public func insert<Profile>(_ record: UserRecord<Profile>) throws {
     if exists(record.id) {
-      throw Exception.Fault("user has already registered")
+      throw Exception.fault("user has already registered")
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       var dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.Fault("json encoding failure")
+        throw Exception.fault("json encoding failure")
     }
     dic["id"] = record.id
     dic["salt"] = record.salt
@@ -81,7 +81,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
         if let v = dic[columns[i]] {
           values.append(v)
         } else {
-          throw Exception.Fault("unexpected field \(columns[i])")
+          throw Exception.fault("unexpected field \(columns[i])")
         }
       }
       let col = columns.joined(separator: ",")
@@ -92,20 +92,20 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       let r = result.errorMessage()
       result.clear()
       guard s == .commandOK || s == .tuplesOK else {
-        throw Exception.Fault(r)
+        throw Exception.fault(r)
       }
     }
   }
 
   public func update<Profile>(_ record: UserRecord<Profile>) throws {
     guard exists(record.id) else {
-      throw Exception.Fault("user does not exists")
+      throw Exception.fault("user does not exists")
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       var dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.Fault("json encoding failure")
+        throw Exception.fault("json encoding failure")
     }
     dic["salt"] = record.salt
     dic["shadow"] = record.shadow
@@ -121,7 +121,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
         if let v = dic[col] {
           values.append(v)
         } else {
-          throw Exception.Fault("unexpected field: \(col)")
+          throw Exception.fault("unexpected field: \(col)")
         }
       }
       values.append(record.id)
@@ -133,14 +133,14 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       let r = result.errorMessage()
       result.clear()
       guard s == .commandOK || s == .tuplesOK else {
-        throw Exception.Fault(r)
+        throw Exception.fault(r)
       }
     }
   }
 
   public func delete(_ id: String) throws {
     guard exists(id) else {
-      throw Exception.Fault("user does not exist")
+      throw Exception.fault("user does not exist")
     }
     try lock.doWithLock {
       let sql = "DELETE FROM \(self.table) WHERE id = $1"
@@ -149,7 +149,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       let r = result.errorMessage()
       result.clear()
       guard s == .commandOK || s == .tuplesOK else {
-        throw Exception.Fault(r)
+        throw Exception.fault(r)
       }
     }
   }
@@ -165,14 +165,14 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       guard s == .commandOK || s == .tuplesOK,
         r.numTuples() == 1 else {
           r.clear()
-          throw Exception.Fault(msg)
+          throw Exception.fault(msg)
       }
       guard let uid = r.getFieldString(tupleIndex: 0, fieldIndex: 0),
         let salt = r.getFieldString(tupleIndex: 0, fieldIndex: 1),
         let shadown = r.getFieldString(tupleIndex: 0, fieldIndex: 2),
         uid == id else {
           r.clear()
-          throw Exception.Fault("unexpected select result")
+          throw Exception.fault("unexpected select result")
       }
       var dic: [String: Any] = [:]
       for i in 0 ..< fields.count {
@@ -196,7 +196,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
         } else if tp == "BLOB" {
           dic[fields[i].name] = r.getFieldBlob(tupleIndex: 0, fieldIndex: j)
         } else {
-          throw Exception.Fault("incompatible SQL type \(tp)")
+          throw Exception.fault("incompatible SQL type \(tp)")
         }
       }
       r.clear()
@@ -207,7 +207,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
         let u = UserRecord(id: id, salt: salt, shadow: shadown, profile: profile)
         return u
       } catch {
-        throw Exception.Fault("json encoding / decoding failure")
+        throw Exception.fault("json encoding / decoding failure")
       }
     }
   }

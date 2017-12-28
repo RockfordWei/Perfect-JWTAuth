@@ -23,7 +23,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
     let data = try encoder.encode(record)
     try lock.doWithLock {
       if 0 == access(path(of: record.id), 0) {
-        throw Exception.Fault("record has already registered")
+        throw Exception.fault("record has already registered")
       }
       try data.write(to: self.url(of: record.id))
     }
@@ -32,7 +32,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
   public func select<Profile>(_ id: String) throws -> UserRecord<Profile> {
     let data: Data = try lock.doWithLock {
       guard 0 == access(path(of: id), 0) else {
-        throw Exception.Fault("record does not exist")
+        throw Exception.fault("record does not exist")
       }
       return try Data(contentsOf: url(of: id))
     }
@@ -43,7 +43,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
     let data = try encoder.encode(record)
     try lock.doWithLock {
       guard 0 == access(path(of: record.id), 0) else {
-        throw Exception.Fault("record does not exist")
+        throw Exception.fault("record does not exist")
       }
       try data.write(to: url(of: record.id))
     }
@@ -52,7 +52,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
   public func delete(_ id: String) throws {
     try lock.doWithLock {
       guard 0 == unlink(path(of: id)) else {
-        throw Exception.Fault("operation failure")
+        throw Exception.fault("operation failure")
       }
     }
   }
@@ -63,7 +63,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
       closedir(dir)
     } else if autocreation {
       guard 0 == mkdir(directory, mode_t(permission)) else {
-        throw Exception.Fault("operation failure")
+        throw Exception.fault("operation failure")
       }
     }
     folder = directory
