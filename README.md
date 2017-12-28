@@ -251,7 +251,7 @@ Otherwise, `verify` will reject any foreign issuers, even the token itself is va
 let (header, content) = try man.verify(id: "someone", token: token_from_client, allowSSO: true)
 
 guard let issuer = content["iss"] as? String {
-  // will not happen here - verify() will guarantee let issuer = content["iss"] as! String
+  // something wrong
 }
 
 if issuer == man.id {
@@ -260,22 +260,26 @@ if issuer == man.id {
   print("it is a foreign token.")
 }
 
-// header and content are both valid dictionary, can apply further validation.
+// header and content are both valid dictionaries, can apply further validation.
 ```
 
 #### Token Renewal
 
 In certain cases, the token needs to be renewed before further operations.
 
-LoginManager provides a `renew()` function, not only for renewal, but also allows the developer to add / replace any information by passing new headers, in a form of dictionary:
+LoginManager provides a `renew()` function, not only for renewal,
+but also allows the developer to add / replace any information by passing new headers, in a form of dictionary:
 
 ``` swift
 let renewedToken = try man.renew(id: "someone", headers: ["foo":"bar", "fou": "par"])
 
-// the renewed token is different from the previous issued tickets, but can be verified in the same interface.
+// the renewed token is different from the previous issued tickets,
+// but it can be verified in the same interface.
 ```
 
-**NOTE** all issued tokens are inevitable valid until naturally expired. There is no way to "cancel" or "log off" a token unless storing the token onto all token validator databases, which will be unwanted in the Single Sign-On policy.
+**NOTE** all issued tokens are inevitable valid until naturally expired.
+There is no way to "cancel" or "log off" a token unless storing the token onto all token validator databases,
+which will be unwanted in the Single Sign-On policy.
 
 #### Load User Profile 
 
