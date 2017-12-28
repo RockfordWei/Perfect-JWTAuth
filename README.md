@@ -48,6 +48,10 @@ Please use the latest version of Swift toolchain v4.0.3.
 
 This package builds with Swift Package Manager and is part of the [Perfect](https://github.com/PerfectlySoft/Perfect) project.
 
+## Acknowledgement
+
+Besides the teamwork of PerfectlySoft Inc., many improvements of this module are suggested by @cheer / @Moon1102 (橘生淮南) and @neoneye (Simon Strandgaard)
+
 ## Objectives
 
 - independently work without ORMs (although it includes a mini ORM actually) or even databases, while it will supports most Perfect database drivers soon.
