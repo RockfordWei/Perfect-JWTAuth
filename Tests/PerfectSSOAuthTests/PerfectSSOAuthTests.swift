@@ -71,10 +71,13 @@ class PerfectSSOAuthTests: XCTestCase {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       let token = try manager.login(id: username, password: godpass)
       print(token)
-      try manager.verify(id: username, token: token)
+      let x = try manager.verify(id: username, token: token)
+      print(x.header)
+      print(x.content)
       let tok2 = try manager.renew(id: username)
       XCTAssertNotEqual(tok2, token)
-      try manager.verify(id: username, token: tok2)
+      let y = try manager.verify(id: username, token: tok2)
+      XCTAssertEqual(x.content["iss"] as? String ?? "X", y.content["iss"] as? String ?? "Y")
     } catch {
       XCTFail(error.localizedDescription)
     }

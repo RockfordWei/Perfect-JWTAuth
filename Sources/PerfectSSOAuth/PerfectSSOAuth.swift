@@ -316,8 +316,10 @@ public class LoginManager<Profile> where Profile: Codable {
   /// - parameters:
   ///   - id: the user id
   ///   - token: the JWT token that the user is presenting.
+  ///   - return: a tuple of header & content info encoded in the token.
   /// - throws: Exception.
-  public func verify(id: String, token: String) throws {
+  public func verify(id: String, token: String, allowSSO: Bool = true ) throws ->
+    (header: [String: Any], content: [String: Any]) {
     guard let jwt = JWTVerifier(token) else {
       _log.report(id, level: .warning, event: .verification,
                   message: "jwt verification failure")
@@ -346,9 +348,15 @@ public class LoginManager<Profile> where Profile: Codable {
                   message: "jwt verification failure: \(token)")
       throw Exception.fault("jwt verification failure")
     }
-    guard let iss = jwt.payload["iss"] as? String,
-      iss == _managerID,
-      let aud = jwt.payload["aud"] as? String,
+    guard let iss = jwt.payload["iss"] as? String else {
+      throw Exception.fault("issuer is null")
+    }
+    if iss != _managerID {
+      guard allowSSO else {
+        throw Exception.fault("invalid issuer")
+      }
+    }
+    guard let aud = jwt.payload["aud"] as? String,
       aud == id,
       let timeout = jwt.payload["exp"] as? Int,
       now <= timeout,
@@ -359,6 +367,7 @@ public class LoginManager<Profile> where Profile: Codable {
         throw Exception.fault("token failure")
     }
     _log.report(id, level: .event, event: .verification, message: "token verified")
+    return (header: jwt.header, content: jwt.payload)
   }
 
   /// generate a jwt token. When a logged user is coming back to access a certain resource,
