@@ -284,9 +284,19 @@ let renewedToken = try man.renew(id: "someone", headers: ["foo":"bar", "fou": "p
 // but it can be verified in the same interface.
 ```
 
-**NOTE** all issued tokens are inevitable valid until naturally expired.
-There is no way to "cancel" or "log off" a token unless storing the token onto all token validator databases,
-which will be unwanted in the Single Sign-On policy.
+#### Log out
+
+Login manager also provides an optional parameter inside of the `verify` function interface to cancel a previously issued token:
+
+``` swift
+let (header, content) = try man.verify(id: username, token: token, logout: true)
+
+// if success, both header and content value is still be readable but token will be no longer valid.
+```
+
+**NOTE** 
+1. Login manager cannot logout a foreign token.
+2. This function can be enable only the token recycler daemon thread is working. See [token recycler](#token-recycler) for more information.
 
 #### Load User Profile 
 
@@ -316,43 +326,6 @@ try man.update(id: username, profile: new_profile)
 try man.drop(id: username)
 ```
 
-### Customize Your Own Database Drivers
-
-If you want to implement a different database driver, just make it sure to comply the `UserDatabase` protocol:
-
-``` swift
-/// A general protocol for a user database, UDB in short.
-/// *NOTE* All implementation of UDB must be:
-/// 1. Thread Safe
-/// 2. Yield error when inserting to an existing record
-public protocol UserDatabase {
-
-  /// insert a new user record to the database
-  /// - parameter record: a user record to save
-  /// - throws: Exception
-  func insert<Profile>(_ record: UserRecord<Profile>) throws
-
-  /// retrieve a user record by its id
-  /// - parameter id: the user id
-  /// - returns: a user record instance
-  /// - throws: Exception
-  func select<Profile>(_ id: String) throws -> UserRecord<Profile>
-
-  /// update an existing user record to the database
-  /// - parameter record: a user record to save
-  /// - throws: Exception
-func update<Profile>(_ record: UserRecord<Profile>) throws
-
-  /// delete an existing user record by its id
-  /// - parameter id: the user id
-  /// - throws: Exception
-  func delete(_ id: String) throws
-}
-
-```
-
-Please feel free to check the existing implementation of UDBxxx for examples.
-
 ## Advanced LoginManager Configuration
 
 The full configuration of `LoginManager` is listed in the class definition:
@@ -366,7 +339,8 @@ public class LoginManager<Profile> where Profile: Codable {
   udb: UserDatabase,
   log: LogManager? = nil,
   rate: RateLimiter? = nil,
-  pass: LoginQualityControl? = nil)
+  pass: LoginQualityControl? = nil,
+  recycle: UInt32 = 0)
 }
 ```
 
@@ -408,7 +382,7 @@ public protocol RateLimiter {
 }
 ```
 
-Check the table below for callback event explaination.
+Check the table below for callback event explanation.
 **NOTE** Implementation should yield errors if reach the limit.
 
 Callback Event|Description
@@ -434,6 +408,83 @@ public protocol LoginQualityControl {
 }
 ```
 
+### Token Recycler
+
+`LoginManager` can cancel any previously issued tokens if a "Token Recycler Daemon Thread" is working. 
+To enable a token recycler thread, just set the constructor parameter `recycle` to a non-zero integer, which means that the daemon will periodically clean up all expired tokens and the period between two adjacent flushing operations will be set to this `recycle` time span, in seconds. 
+
+**CAUTION** This feature is still experimental, especially on the JSON file driver, which implement the ticket management protocol in memory and is subject to the issued token quantity level:
+1. You can safely disable it by skipping this parameter which implicitly sets the `recycle` value to zero, but all tokens will be wildly valid until naturally expired.
+2. If the `recycle` value is too small, then the daemon thread may take an unexpected percent of CPU usage.
+3. If the `recycle` value is too large, then the accumulating garbage may not be acceptable before each flushing, although it could only happen in JSON file because all issued tickets are residing in the memory. Other database drivers should be fine with a larger `recycle` value.
+4. If using JSON file as the database driver while not allowing SSO as foreign tokens, natively, all token issued are valid only when the `LoginManager` instance is alive.
+5. The recycling daemon thread might die if some critical accidents happened, e.g., memory run out.
+
+To calculate the best balance of a `recycle` time value, in seconds, to enable the token logout function, check the design pattern below:
+- the token issued are managed by its `content["jit"]`, as a uuid string, or "ticket", in short. So each ticket may need 40 bytes at least. The JSON file driver is using a special algorithm called "reversible hash tables" to store the tickets, so every ticket may take about 80 bytes.
+- every `login()` or `renew()` method will generate a new "ticket". This means if there is a load of 1,000 new logged different users access in per second, the memory usage will increase at least 80KB per seconds as well.
+- the "ticket" is storing either in memory (as JSON file) or as a single table (as other databases), with its expiration timestamp (as a 32 bit integer)
+- If expired, the "ticket" will be deleted after every `recycle` break. During the break, the daemon thread is sleeping.
+
+So in a general speaking, a value of 30 or 60 seconds of `recycle` should work for small load (< 1,000 user access per second).
+
+## Customize Your Own Database Drivers
+
+If you want to implement a different database driver, just make it sure to comply the `UserDatabase` protocol:
+
+``` swift
+/// A general protocol for a user database, UDB in short.
+/// *NOTE* All implementation of UDB must be:
+/// 1. Thread Safe
+/// 2. Yield error when inserting to an existing record
+public protocol UserDatabase {
+
+  /// -------------------- BASIC CRUD OPERATION --------------------
+  /// insert a new user record to the database
+  /// - parameter record: a user record to save
+  /// - throws: Exception
+  func insert<Profile>(_ record: UserRecord<Profile>) throws
+
+  /// retrieve a user record by its id
+  /// - parameter id: the user id
+  /// - returns: a user record instance
+  /// - throws: Exception
+  func select<Profile>(_ id: String) throws -> UserRecord<Profile>
+
+  /// update an existing user record to the database
+  /// - parameter record: a user record to save
+  /// - throws: Exception
+  func update<Profile>(_ record: UserRecord<Profile>) throws
+
+  /// delete an existing user record by its id
+  /// - parameter id: the user id
+  /// - throws: Exception
+  func delete(_ id: String) throws
+  
+  /// -------------------- JWT TOKEN MANAGEMENT SYSTEM --------------------
+  /// insert a new ticket with its expiration setting to the database
+  /// - parameter ticket: the ticket to save
+  /// - parameter expiration: the expiration end in timestamp
+  /// - throws: Exception
+  func issue(_ ticket: String, _ expiration: time_t) throws
+
+  /// invalidate a ticket
+  /// - parameter ticket: the ticket to cancel
+  /// - throws: Exception
+  func cancel(_ ticket: String) throws
+
+  /// test if the giving ticket is valid
+  /// - parameter ticket: the ticket to check
+  func isValid(_ ticket: String) -> Bool
+
+  /// recycle all expired tickets inside of the database
+  /// - throws: Exception
+  func flush() throws
+}
+
+```
+
+Please feel free to check the existing implementation of UDBxxx for examples.
 
 ## Notes
 

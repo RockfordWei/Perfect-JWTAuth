@@ -521,7 +521,7 @@ public class LoginManager<Profile> where Profile: Codable {
                     message: "jwt invalid payload: \(jwt.payload)")
         throw Exception.fault("token failure")
     }
-    if iss == _managerID {
+    if iss == _managerID && self._recycle > 0 {
       if logout {
         do {
           try _cancel(ticket)
@@ -552,7 +552,9 @@ public class LoginManager<Profile> where Profile: Codable {
       "exp": expiration, "nbf": now, "iat": now, "jit": ticket
     ]
 
-    try _issue(ticket, expiration)
+    if self._recycle > 0 {
+      try _issue(ticket, expiration)
+    }
 
     guard let jwt = JWTCreator(payload: claims) else {
       _log.report(u.id, level: .critical, event: .login,

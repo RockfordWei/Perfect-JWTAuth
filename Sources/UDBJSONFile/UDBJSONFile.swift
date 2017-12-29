@@ -51,6 +51,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
       } else {
         ticketsReversed[timekey] = set
       }
+      _ = tickets.removeValue(forKey: ticket)
     }
   }
 
