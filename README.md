@@ -194,6 +194,8 @@ public enum LoginManagementEvent: Int {
   case logoff = 3
   case unregistration = 4
   case updating = 5
+  case renewal = 6
+  case system = 7
 }
 
 public enum LogLevel: Int {
@@ -349,9 +351,86 @@ func update<Profile>(_ record: UserRecord<Profile>) throws
 
 Please feel free to check the existing implementation of UDBxxx for examples.
 
-## API Reference
+## Advanced LoginManager Configuration
 
-Coming Soon.
+The full configuration of `LoginManager` is listed in the class definition:
+
+``` swift
+/// a generic Login Manager
+public class LoginManager<Profile> where Profile: Codable {
+
+  public init(cipher: Cipher = .aes_256_cbc, keyIterations: Int = 1024,
+  digest: Digest = .md5, saltLength: Int = 16, alg: JWT.Alg = .hs256,
+  udb: UserDatabase,
+  log: LogManager? = nil,
+  rate: RateLimiter? = nil,
+  pass: LoginQualityControl? = nil)
+```
+
+### Encryption Control
+
+The first section of `LoginManager` constructor is the encryption control:
+
+- cipher: a cipher algorithm to do the password encryption. AES_252_CBC by default.
+- keyIterations: key iteration times for encryption, 1024 by default.
+- digest: digest algorithm for encryption, MD5 by default.
+- saltLength: length to generate the salt string, 16 by default.
+- alg: JWT token generation algorithm, HS256 by default
+
+### User Database Driver
+
+Please check [Open Database](### Open Database) for more information
+
+### Log Manager
+
+Please check [Log Settings](### Log Settings) for more information
+
+
+### Rate Limiter
+
+A `RateLimiter` is a protocol that monitors unusual behaviour, such as excessive access, etc.
+The login manager will try these callbacks prior to the actual operations
+You can develop your own rate limiter by implementing the protocol below:
+
+``` swift
+public protocol RateLimiter {
+  func onAttemptRegister(_ userId: String, password: String) throws
+  func onAttemptLogin(_ userId: String, password: String) throws
+  func onLogin<Profile>(_ record: UserRecord<Profile>) throws
+  func onAttemptToken(_ userID: String, token: String) throws
+  func onRenewToken<Profile>(_ record: UserRecord<Profile>) throws
+  func onUpdate<Profile>(_ record: UserRecord<Profile>) throws
+  func onUpdate(_ userId: String, password: String) throws
+  func onDeletion(_ userId: String) throws
+}
+```
+
+Check the table below for callback event explaination.
+**NOTE** Implementation should yield errors if reach the limit.
+
+Callback Event|Description
+-----------------|-------------
+onAttemptRegister|an attempt on registration
+onAttemptLogin|an attempt on login, prior to an actual login.
+onLogin|a login event, after a successful login
+onAttemptToken|an attempt on token verification, prior to an actual verification
+onRenewToken|a token renew event
+onUpdate|a user profile update event, could be update password or profile
+onDeletion|an attempt on deletion user record
+
+### Login / Password Quality Control
+
+`LoginManager` also accepts customizable login / password quality control.
+If the protocol is implemented, it will call these interfaces as events when necessary.
+The verification is not limited to typical scenarios such as registration or password update to avoid weak credentials, but also applicable in routine user name checking, especially as protecting the login system from oversize username cracks.
+
+``` swift
+public protocol LoginQualityControl {
+  func goodEnough(userId: String) throws
+  func goodEnough(password: String) throws
+}
+```
+
 
 ## Notes
 
