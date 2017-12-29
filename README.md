@@ -302,7 +302,7 @@ try man.update(id: username, password: new_password)
 ```
 
 **NOTE**: By default, both user id and password are in a length of **[5,80]** string. Also id and password will be coded in URL encoding rules.
-Check [Login / Password Quality Control](#Login / Password Quality Control) for more information.
+Check [Login / Password Quality Control]((#login--password-quality-control)) for more information.
 
 #### Update Profile
 
@@ -382,11 +382,11 @@ The first section of `LoginManager` constructor is the encryption control:
 
 ### User Database Driver
 
-Please check [Open Database](# Open Database) for more information
+Please check [Open Database](#open-database) for more information
 
 ### Log Manager
 
-Please check [Log Settings](# Log Settings) for more information
+Please check [Log Settings](#log-settings) for more information
 
 
 ### Rate Limiter
