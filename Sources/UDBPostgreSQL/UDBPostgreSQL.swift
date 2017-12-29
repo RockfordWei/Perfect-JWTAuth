@@ -49,10 +49,74 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     guard s == .commandOK || s == .tuplesOK else {
       throw Exception.fault(r)
     }
+    let sql2 = """
+    CREATE TABLE IF NOT EXISTS tickets (
+    id VARCHAR(256) PRIMARY KEY NOT NULL,
+    expiration INTEGER)
+    """
+    let result2 = try db.execute(statement: sql2)
+    let s2 = result2.status()
+    let r2 = result2.errorMessage()
+    result2.clear()
+    guard s2 == .commandOK || s2 == .tuplesOK else {
+      throw Exception.fault(r2)
+    }
   }
 
   deinit {
     db.close()
+  }
+
+  public func issue(_ ticket: String, _ expiration: time_t) throws {
+    guard expiration > time(nil) else {
+      throw Exception.fault("ticket has already expired")
+    }
+    try lock.doWithLock {
+      let sql = "INSERT INTO tickets(id, expiration) VALUES ($1, $2)"
+      let result = db.exec(statement: sql, params: [ticket, expiration])
+      let s = result.status()
+      let r = result.errorMessage()
+      result.clear()
+      guard s == .commandOK || s == .tuplesOK else {
+        throw Exception.fault(r)
+      }
+    }
+  }
+
+  public func cancel(_ ticket: String) throws {
+    try lock.doWithLock {
+      let sql = "DELETE FROM tickets WHERE id = $1"
+      let result = db.exec(statement: sql, params: [ticket])
+      let s = result.status()
+      let r = result.errorMessage()
+      result.clear()
+      guard s == .commandOK || s == .tuplesOK else {
+        throw Exception.fault(r)
+      }
+    }
+  }
+
+  public func isValid(_ ticket: String) -> Bool {
+    return lock.doWithLock {
+      let sql = "SELECT id FROM tickets WHERE id = $1 LIMIT 1"
+      let res = db.exec(statement: sql, params: [ticket])
+      let count = res.numTuples()
+      res.clear()
+      return count > 0
+    }
+  }
+
+  public func flush() throws {
+    try lock.doWithLock {
+      let sql = "DELETE FROM tickets WHERE expiration < $1"
+      let result = db.exec(statement: sql, params: [time(nil)])
+      let s = result.status()
+      let r = result.errorMessage()
+      result.clear()
+      guard s == .commandOK || s == .tuplesOK else {
+        throw Exception.fault(r)
+      }
+    }
   }
 
   public func insert<Profile>(_ record: UserRecord<Profile>) throws {

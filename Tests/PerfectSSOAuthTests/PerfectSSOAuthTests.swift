@@ -89,6 +89,26 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTFail(error.localizedDescription)
     }
     do {
+      let manager = LoginManager<Profile>(udb: udb, log: log, recycle: 3)
+      try manager.update(id: username, password: godpass)
+      let token = try manager.login(id: username, password: godpass, timeout: 2)
+      let x = try manager.verify(id: username, token: token)
+      print(x.header)
+      print(x.content)
+      print("waiting for ticket expiration test")
+      sleep(5)
+      let y = try? manager.verify(id: username, token: token)
+      XCTAssertNil(y)
+      let token2 = try manager.login(id: username, password: godpass)
+      let x2 = try manager.verify(id: username, token: token2, logout: true)
+      print(x2.header)
+      print(x2.content)
+      let y2 = try? manager.verify(id: username, token: token2)
+      XCTAssertNil(y2)
+    } catch {
+      XCTFail(error.localizedDescription)
+    }
+    do {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       var rocky = try manager.load(id: username)
       print(rocky)
@@ -115,6 +135,7 @@ class PerfectSSOAuthTests: XCTestCase {
     let pg = PGConnection()
     _ = pg.connectdb(pgconnection)
     _ = pg.exec(statement: "DROP TABLE \(table)")
+    _ = pg.exec(statement: "DROP TABLE tickets")
     do {
       let udb = try UDBPostgreSQL<Profile>(connection: pgconnection, table: "users", sample: profile)
       testStandard(udb: udb, label: "postgresql")
@@ -129,6 +150,7 @@ class PerfectSSOAuthTests: XCTestCase {
       return
     }
     _ = mysql.query(statement: "DROP TABLE \(table)")
+    _ = mysql.query(statement: "DROP TABLE tickets")
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
        password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
@@ -144,6 +166,7 @@ class PerfectSSOAuthTests: XCTestCase {
       return
     }
     _ = mysql.query(statement: "DROP TABLE \(table)")
+    _ = mysql.query(statement: "DROP TABLE tickets")
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)

@@ -1,6 +1,7 @@
 import PerfectLib
 import PerfectCrypto
 import Foundation
+import Dispatch
 
 /// A container structure to hold a user record.
 public struct UserRecord<Profile>: Codable where Profile: Codable {
@@ -113,6 +114,25 @@ public protocol UserDatabase {
   /// - parameter id: the user id
   /// - throws: Exception
   func delete(_ id: String) throws
+
+  /// insert a new ticket with its expiration setting to the database
+  /// - parameter ticket: the ticket to save
+  /// - parameter expiration: the expiration end in timestamp
+  /// - throws: Exception
+  func issue(_ ticket: String, _ expiration: time_t) throws
+
+  /// invalidate a ticket
+  /// - parameter ticket: the ticket to cancel
+  /// - throws: Exception
+  func cancel(_ ticket: String) throws
+
+  /// test if the giving ticket is valid
+  /// - parameter ticket: the ticket to check
+  func isValid(_ ticket: String) -> Bool
+
+  /// recycle all expired tickets inside of the database
+  /// - throws: Exception
+  func flush() throws
 }
 
 /// a protocol that monitors unusual user behaviours, such as excessive access, etc.
@@ -223,13 +243,17 @@ public class LoginManager<Profile> where Profile: Codable {
   internal let _log: LogManager
   internal let _rate: RateLimiter
   internal let _pass: LoginQualityControl
+  internal let _recycle: UInt32
 
   typealias U = UserRecord<Profile>
   internal let _insert: (_ record: U ) throws -> Void
   internal let _select: (_ id: String) throws -> U
   internal let _update: (_ record: U) throws -> Void
   internal let _delete: (_ id: String) throws -> Void
-
+  internal let _issue: (_ ticket: String, _ expiration: time_t) throws -> Void
+  internal let _cancel: (_ ticket: String) throws -> Void
+  internal let _isValid: (_ ticket: String) -> Bool
+  internal let _flush: () throws -> Void
   /// every instance of LoginManager has a unique manager id, in form of uuid
   public var globalId: String { return _managerID }
 
@@ -244,13 +268,15 @@ public class LoginManager<Profile> where Profile: Codable {
   ///   - log: a log manager if applicable, default nil for logging to the console.
   ///   - rate: a RateLimiter. Any user operations, such as access, update or token renew, will call the rate limiter first. By default it is unlimited
   ///   - pass: a login / password quality control, will call before any password updates. No password quality control by default.
+  ///   - recycle: the waiting period to run the ticket recycler, in seconds. If 0 by default, the login manager will not start the ticket recycle task and all tickets issued will be valid in expiration even cancelled (logout)
   public init(cipher: Cipher = .aes_256_cbc, keyIterations: Int = 1024,
               digest: Digest = .md5, saltLength: Int = 16,
               alg: JWT.Alg = .hs256,
               udb: UserDatabase,
               log: LogManager? = nil,
               rate: RateLimiter? = nil,
-              pass: LoginQualityControl? = nil) {
+              pass: LoginQualityControl? = nil,
+              recycle: UInt32 = 0) {
     _cipher = cipher
     _keyIterations = keyIterations
     _digest = digest
@@ -266,6 +292,10 @@ public class LoginManager<Profile> where Profile: Codable {
     _select = udb.select
     _update = udb.update
     _delete = udb.delete
+    _issue = udb.issue
+    _cancel = udb.cancel
+    _isValid = udb.isValid
+    _flush = udb.flush
     if let limiter = rate {
       _rate = limiter
     } else {
@@ -275,6 +305,22 @@ public class LoginManager<Profile> where Profile: Codable {
       _pass = pqc
     } else {
       _pass = HumblestLoginControl()
+    }
+    _recycle = recycle
+    if _recycle > 0 {
+      let q = DispatchQueue(label: _managerID)
+      q.async {
+        while self._recycle > 0 {
+          sleep(self._recycle)
+          do {
+            try self._flush()
+          } catch (let err) {
+            self._log.report("system", level: .critical, event: .system,
+            message: "ticket recycler is stopped for " + err.localizedDescription)
+            break
+          }
+        }
+      }
     }
   }
 
@@ -421,9 +467,11 @@ public class LoginManager<Profile> where Profile: Codable {
   /// - parameters:
   ///   - id: the user id
   ///   - token: the JWT token that the user is presenting.
-  ///   - return: a tuple of header & content info encoded in the token.
+  ///   - allowSSO: allow an incoming foreign token, i.e, the token is not issue by this login manager.
+  ///   - logout: log off the current token bearer. **NOTE** this operation can only perform on local issued tickets.
+  /// - returns: a tuple of header & content info encoded in the token.
   /// - throws: Exception.
-  public func verify(id: String, token: String, allowSSO: Bool = true ) throws ->
+  public func verify(id: String, token: String, allowSSO: Bool = true, logout: Bool = false) throws ->
     (header: [String: Any], content: [String: Any]) {
     do {
       try _pass.goodEnough(userId: id)
@@ -466,33 +514,45 @@ public class LoginManager<Profile> where Profile: Codable {
       let timeout = jwt.payload["exp"] as? Int,
       now <= timeout,
       let nbf = jwt.payload["nbf"] as? Int,
-      nbf <= now else {
+      nbf <= now,
+      let ticket = jwt.payload["jit"] as? String
+      else {
         _log.report(id, level: .warning, event: .verification,
                     message: "jwt invalid payload: \(jwt.payload)")
         throw Exception.fault("token failure")
+    }
+    if iss == _managerID {
+      if logout {
+        do {
+          try _cancel(ticket)
+        } catch (let err) {
+          _log.report(id, level: .warning, event: .logoff,
+                      message: "log out failure:" + err.localizedDescription )
+        }
+      } else {
+        guard _isValid(ticket) else {
+          _log.report(id, level: .warning, event: .verification,
+                      message: "jwt valid but ticket is either expired or cancelled")
+          throw Exception.fault("invalid ticket")
+        }
+      }
     }
     _log.report(id, level: .event, event: .verification, message: "token verified")
     return (header: jwt.header, content: jwt.payload)
   }
 
-  /// generate a jwt token. When a logged user is coming back to access a certain resource,
-  /// use this function to alloc a token to the user
-  /// - parameters:
-  ///   - u: the user record
-  ///   - subject: optional, subject to issue a jwt token, empty by default
-  ///   - timeout: optional, jwt token valid period, in seconds. 3600 by default (one hour)
-  ///   - headers: optional, extra headers to issue, empty by default.
-  /// - throws: Exception
-  /// - returns: a valid jwt token
   internal func renew(u: U,
                       subject: String = "", timeout: Int = 3600,
                       headers: [String:Any] = [:]) throws -> String {
     let now = time(nil)
     let expiration = now + timeout
+    let ticket =  UUID().string
     let claims:[String: Any] = [
       "iss":_managerID, "sub": subject, "aud": u.id,
-      "exp": expiration, "nbf": now, "iat": now, "jit": UUID().string
+      "exp": expiration, "nbf": now, "iat": now, "jit": ticket
     ]
+
+    try _issue(ticket, expiration)
 
     guard let jwt = JWTCreator(payload: claims) else {
       _log.report(u.id, level: .critical, event: .login,

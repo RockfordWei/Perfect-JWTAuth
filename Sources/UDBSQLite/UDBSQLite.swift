@@ -53,10 +53,61 @@ public class UDBSQLite<Profile>: UserDatabase {
     salt TEXT, shadow TEXT, \(fieldDescription))
     """
     try db.execute(statement: sql)
+    try db.execute(statement: """
+    CREATE TABLE IF NOT EXISTS tickets (
+    id TEXT PRIMARY KEY NOT NULL,
+    expiration INTEGER)
+    """)
   }
 
   deinit {
     db.close()
+  }
+
+  public func issue(_ ticket: String, _ expiration: time_t) throws {
+    guard expiration > time(nil) else {
+      throw Exception.fault("ticket has already expired")
+    }
+    try lock.doWithLock {
+      try db.execute(statement: "INSERT INTO tickets(id, expiration) VALUES (?, ?)") {
+        stmt in
+        try stmt.bind(position: 1, ticket)
+        try stmt.bind(position: 2, expiration)
+      }
+    }
+  }
+
+  public func cancel(_ ticket: String) throws {
+    try lock.doWithLock {
+      try db.execute(statement: "DELETE FROM tickets WHERE id = ?") {
+        stmt in
+        try stmt.bind(position: 1, ticket)
+      }
+    }
+  }
+
+  public func isValid(_ ticket: String) -> Bool {
+    let count = (try? lock.doWithLock {
+      var count = 0
+      let sql = "SELECT id FROM tickets WHERE id = ? LIMIT 1"
+      try self.db.forEachRow(statement: sql,
+                             doBindings: { stmt in
+                              try stmt.bind(position: 1, ticket)
+      }) { _, _ in
+        count += 1
+      }
+      return count
+      }) ?? 0
+    return count > 0
+  }
+
+  public func flush() throws {
+    try lock.doWithLock {
+      try db.execute(statement: "DELETE FROM tickets WHERE expiration < ?") {
+        stmt in
+        try stmt.bind(position: 1, time(nil))
+      }
+    }
   }
 
   internal func exists(_ id: String) -> Bool {

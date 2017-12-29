@@ -65,10 +65,88 @@ public class UDBMariaDB<Profile>: UserDatabase {
     guard db.query(statement: sql) else {
       throw Exception.fault("table creation failure")
     }
+    let sql2 = """
+    CREATE TABLE IF NOT EXISTS tickets (
+    id VARCHAR(80) PRIMARY KEY NOT NULL,
+    expiration INTEGER)
+    """
+    guard db.query(statement: sql2) else {
+      throw Exception.fault("tickets table creation failure")
+    }
   }
 
   deinit {
     db.close()
+  }
+
+  public func issue(_ ticket: String, _ expiration: time_t) throws {
+    guard expiration > time(nil) else {
+      throw Exception.fault("ticket has already expired")
+    }
+    try lock.doWithLock {
+      let sql = "INSERT INTO tickets(id, expiration) VALUES (?, ?)"
+      let stmt = MySQLStmt(db)
+      defer { stmt.close() }
+      guard stmt.prepare(statement: sql)
+        else {
+          throw Exception.fault(db.errorMessage())
+      }
+      stmt.bindParam(ticket)
+      stmt.bindParam(expiration)
+      guard stmt.execute() else {
+        throw Exception.fault(db.errorMessage())
+      }
+    }
+  }
+
+  public func cancel(_ ticket: String) throws {
+    try lock.doWithLock {
+      let sql = "DELETE FROM tickets WHERE id = ?"
+      let stmt = MySQLStmt(db)
+      defer { stmt.close() }
+      guard stmt.prepare(statement: sql)
+        else {
+          throw Exception.fault(db.errorMessage())
+      }
+      stmt.bindParam(ticket)
+      guard stmt.execute() else {
+        throw Exception.fault(db.errorMessage())
+      }
+    }
+  }
+
+  public func isValid(_ ticket: String) -> Bool {
+    let count = (try? lock.doWithLock {
+      let stmt = MySQLStmt(db)
+      defer { stmt.close() }
+      let sql = "SELECT id FROM tickets WHERE id = ? LIMIT 1"
+      guard stmt.prepare(statement:sql)
+        else {
+          throw Exception.fault(db.errorMessage())
+      }
+      stmt.bindParam(ticket)
+      guard stmt.execute() else {
+        throw Exception.fault(db.errorMessage())
+      }
+      return stmt.results().numRows
+      }) ?? 0
+    return count > 0
+  }
+
+  public func flush() throws {
+    try lock.doWithLock {
+      let sql = "DELETE FROM tickets WHERE expiration < ?"
+      let stmt = MySQLStmt(db)
+      defer { stmt.close() }
+      guard stmt.prepare(statement: sql)
+        else {
+          throw Exception.fault(db.errorMessage())
+      }
+      stmt.bindParam(time(nil))
+      guard stmt.execute() else {
+        throw Exception.fault(db.errorMessage())
+      }
+    }
   }
 
   internal func exists(_ id: String) -> Bool {
