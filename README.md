@@ -50,7 +50,7 @@ This package builds with Swift Package Manager and is part of the [Perfect](http
 
 ## Acknowledgement
 
-Besides the teamwork of PerfectlySoft Inc., many improvements of this module are suggested by @cheer / @Moon1102 (橘生淮南) and @neoneye (Simon Strandgaard)
+Besides the teamwork of PerfectlySoft Inc., many improvements  and features of this module are suggested / contributed by [@cheer / @Moon1102 (橘生淮南)](https://github.com/Moon1102) and [@neoneye (Simon Strandgaard)](https://github.com/neoneye).
 
 ## Objectives
 
