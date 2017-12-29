@@ -521,14 +521,18 @@ public class LoginManager<Profile> where Profile: Codable {
                     message: "jwt invalid payload: \(jwt.payload)")
         throw Exception.fault("token failure")
     }
+
+    var needlog = true
     if iss == _managerID && self._recycle > 0 {
       if logout {
         do {
           try _cancel(ticket)
+          _log.report(id, level: .event, event: .logoff, message: nil )
         } catch (let err) {
           _log.report(id, level: .warning, event: .logoff,
                       message: "log out failure:" + err.localizedDescription )
         }
+        needlog = false
       } else {
         guard _isValid(ticket) else {
           _log.report(id, level: .warning, event: .verification,
@@ -537,7 +541,10 @@ public class LoginManager<Profile> where Profile: Codable {
         }
       }
     }
-    _log.report(id, level: .event, event: .verification, message: "token verified")
+
+    if needlog {
+      _log.report(id, level: .event, event: .verification, message: "token verified")
+    }
     return (header: jwt.header, content: jwt.payload)
   }
 

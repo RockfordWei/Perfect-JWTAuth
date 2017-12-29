@@ -77,8 +77,6 @@ SQLite|Perfect SQLite|export DATABASE_DRIVER=SQLite
 MySQL|Perfect MySQL|export DATABASE_DRIVER=MySQL
 MariaDB|Perfect MariaDB|export DATABASE_DRIVER=MariaDB
 PostgreSQL| Perfect PostgreSQL|export DATABASE_DRIVER=PostgreSQL
-MongoDB| Coming Soon|export DATABASE_DRIVER=MongoDB
-Redis| Coming Soon|export DATABASE_DRIVER=Redis
 
 ### Local Mirror
 
