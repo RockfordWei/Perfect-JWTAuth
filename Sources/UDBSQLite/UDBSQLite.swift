@@ -9,7 +9,6 @@ typealias Field = DataworkUtility.Field
 public class UDBSQLite<Profile>: UserDatabase {
   internal let lock: Threading.Lock
   internal let db: SQLite
-  internal let table: String
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
   internal let fields: [Field]
@@ -19,12 +18,11 @@ public class UDBSQLite<Profile>: UserDatabase {
   ///   - table: the table name of the user record
   ///   - sample: a sample profile for table creation
   /// - throws: Exception
-  public init<Profile: Codable>(path: String, table: String, sample: Profile) throws {
+  public init<Profile: Codable>(path: String, sample: Profile) throws {
     lock = Threading.Lock()
     db = try SQLite(path)
     encoder = JSONEncoder()
     decoder = JSONDecoder()
-    self.table = table
     let properties = try DataworkUtility.explainProperties(of: sample)
     guard !properties.isEmpty else {
       throw Exception.fault("invalid profile structure")
@@ -48,7 +46,7 @@ public class UDBSQLite<Profile>: UserDatabase {
     let description:[String] = fields.map { "\($0.name) \($0.type)" }
     let fieldDescription = description.joined(separator: ",")
     let sql = """
-    CREATE TABLE IF NOT EXISTS \(table)(
+    CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY NOT NULL,
     salt TEXT, shadow TEXT, \(fieldDescription))
     """
@@ -113,7 +111,7 @@ public class UDBSQLite<Profile>: UserDatabase {
   internal func exists(_ id: String) -> Bool {
     let count = (try? lock.doWithLock {
       var count = 0
-      let sql = "SELECT id FROM \(self.table) WHERE id = ? LIMIT 1"
+      let sql = "SELECT id FROM users WHERE id = ? LIMIT 1"
       try self.db.forEachRow(statement: sql,
         doBindings: { stmt in
           try stmt.bind(position: 1, id)
@@ -141,7 +139,7 @@ public class UDBSQLite<Profile>: UserDatabase {
       let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
       let col = columns.joined(separator: ",")
       let que = qmarks.joined(separator: ",")
-      let sql = "INSERT INTO \(self.table)(\(col)) VALUES(\(que))"
+      let sql = "INSERT INTO users (\(col)) VALUES(\(que))"
       try db.execute(statement: sql){
         stmt in
         try stmt.bind(position: 1, record.id)
@@ -175,7 +173,7 @@ public class UDBSQLite<Profile>: UserDatabase {
       var u: UserRecord<Profile>? = nil
       let columns:[String] = fields.map { $0.name }
       let col = columns.joined(separator: ",")
-      let sql = "SELECT id, salt, shadow, \(col) FROM \(self.table) WHERE id = ? LIMIT 1"
+      let sql = "SELECT id, salt, shadow, \(col) FROM users WHERE id = ? LIMIT 1"
       try self.db.forEachRow(statement: sql,
         doBindings: { stmt in
           try stmt.bind(position: 1, id)
@@ -216,7 +214,7 @@ public class UDBSQLite<Profile>: UserDatabase {
       throw Exception.fault("user does not exists")
     }
     try lock.doWithLock {
-      let sql = "DELETE FROM \(table) WHERE id = ?"
+      let sql = "DELETE FROM users WHERE id = ?"
       try db.execute(statement: sql){
         stmt in
         try stmt.bind(position: 1, id)
@@ -237,7 +235,7 @@ public class UDBSQLite<Profile>: UserDatabase {
     try lock.doWithLock {
       let columns:[String] = fields.map { "\($0.name) = ?" }
       let sentence = columns.joined(separator: ",")
-      let sql = "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
+      let sql = "UPDATE users SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
       try db.execute(statement: sql){
         stmt in
         try stmt.bind(position: 1, record.salt)

@@ -28,14 +28,13 @@ public class UDBMariaDB<Profile>: UserDatabase {
 
   internal let lock: Threading.Lock
   internal let db: MySQL
-  internal let table: String
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
   internal let fields: [Field]
 
   public init<Profile: Codable>
     (host: String, user: String, password: String,
-     database: String, table: String, sample: Profile) throws {
+     database: String, sample: Profile) throws {
     lock = Threading.Lock()
     db = MySQL()
     encoder = JSONEncoder()
@@ -44,7 +43,6 @@ public class UDBMariaDB<Profile>: UserDatabase {
       db.connect(host: host, user: user, password: password, db: database) else {
         throw Exception.fault("connection failure")
     }
-    self.table = table
     let properties = try DataworkUtility.explainProperties(of: sample)
     guard !properties.isEmpty else {
       throw Exception.fault("invalid profile structure")
@@ -58,7 +56,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     let description:[String] = fields.map { "\($0.name) \($0.type)" }
     let fieldDescription = description.joined(separator: ",")
     let sql = """
-    CREATE TABLE IF NOT EXISTS \(table)(
+    CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(80) PRIMARY KEY NOT NULL,
     salt VARCHAR(256), shadow VARCHAR(1024), \(fieldDescription))
     """
@@ -153,7 +151,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     let count = (try? lock.doWithLock {
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
-      let sql = "SELECT id FROM \(self.table) WHERE id = ? LIMIT 1"
+      let sql = "SELECT id FROM users WHERE id = ? LIMIT 1"
       guard stmt.prepare(statement:sql)
         else {
           throw Exception.fault(db.errorMessage())
@@ -183,7 +181,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
       let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
       let col = columns.joined(separator: ",")
       let que = qmarks.joined(separator: ",")
-      let sql = "INSERT INTO \(self.table)(\(col)) VALUES(\(que))"
+      let sql = "INSERT INTO users (\(col)) VALUES(\(que))"
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
       guard stmt.prepare(statement: sql)
@@ -217,7 +215,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
       let properties:[String] = fields.map { $0.name }
       let columns:[String] = fields.map { "\($0.name) = ?" }
       let sentence = columns.joined(separator: ",")
-      let sql = "UPDATE \(table) SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
+      let sql = "UPDATE users SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
       guard stmt.prepare(statement: sql) else {
@@ -241,7 +239,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
       var u: UserRecord<Profile>? = nil
       let columns:[String] = fields.map { $0.name }
       let col = columns.joined(separator: ",")
-      let sql = "SELECT id, salt, shadow, \(col) FROM \(self.table) WHERE id = ? LIMIT 1"
+      let sql = "SELECT id, salt, shadow, \(col) FROM users WHERE id = ? LIMIT 1"
       let stmt = MySQLStmt(self.db)
       defer { stmt.close() }
       guard stmt.prepare(statement: sql)
@@ -287,7 +285,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     try lock.doWithLock {
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
-      let sql = "DELETE FROM \(self.table) WHERE id = ?"
+      let sql = "DELETE FROM users WHERE id = ?"
       guard stmt.prepare(statement: sql)
         else {
           throw Exception.fault(db.errorMessage())

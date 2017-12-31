@@ -9,20 +9,18 @@ typealias Field = DataworkUtility.Field
 public class UDBPostgreSQL<Profile>: UserDatabase {
   internal let lock: Threading.Lock
   internal let db: PGConnection
-  internal let table: String
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
   internal let fields: [Field]
 
   public init<Profile: Codable>
-    (connection: String, table: String, sample: Profile) throws {
+    (connection: String, sample: Profile) throws {
     db = PGConnection()
     let status = db.connectdb(connection)
     guard status == .ok else {
       throw Exception.fault("Connection Failure, please check the connection string " + connection)
     }
     lock = Threading.Lock()
-    self.table = table
     encoder = JSONEncoder()
     decoder = JSONDecoder()
     let properties = try DataworkUtility.explainProperties(of: sample)
@@ -38,7 +36,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     let description:[String] = fields.map { "\($0.name) \($0.type)" }
     let fieldDescription = description.joined(separator: ",")
     let sql = """
-    CREATE TABLE IF NOT EXISTS \(table)(
+    CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(80) PRIMARY KEY NOT NULL,
     salt VARCHAR(256), shadow VARCHAR(1024), \(fieldDescription))
     """
@@ -150,7 +148,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       }
       let col = columns.joined(separator: ",")
       let que = variables.joined(separator: ",")
-      sql = "INSERT INTO \(self.table)(\(col)) VALUES(\(que))"
+      sql = "INSERT INTO users (\(col)) VALUES(\(que))"
       let result = db.exec(statement: sql, params: values)
       let s = result.status()
       let r = result.errorMessage()
@@ -191,7 +189,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       values.append(record.id)
       let sentence = columns.joined(separator: ",")
       let idNum = properties.count + 1
-      let sql = "UPDATE \(table) SET \(sentence) WHERE id = $\(idNum)"
+      let sql = "UPDATE users SET \(sentence) WHERE id = $\(idNum)"
       let result = db.exec(statement: sql, params: values)
       let s = result.status()
       let r = result.errorMessage()
@@ -207,7 +205,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       throw Exception.fault("user does not exist")
     }
     try lock.doWithLock {
-      let sql = "DELETE FROM \(self.table) WHERE id = $1"
+      let sql = "DELETE FROM users WHERE id = $1"
       let result = db.exec(statement: sql, params: [id])
       let s = result.status()
       let r = result.errorMessage()
@@ -222,7 +220,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     return try lock.doWithLock  {
       let columns:[String] = fields.map { $0.name }
       let col = columns.joined(separator: ",")
-      let  sql = "SELECT id, salt, shadow, \(col) FROM \(self.table) WHERE id = $1 LIMIT 1"
+      let  sql = "SELECT id, salt, shadow, \(col) FROM users WHERE id = $1 LIMIT 1"
       let r = db.exec(statement: sql, params: [id])
       let s = r.status()
       let msg = r.errorMessage()
@@ -278,7 +276,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
 
   internal func exists(_ id: String) -> Bool {
     return lock.doWithLock {
-      let sql = "SELECT id FROM \(self.table) WHERE id = $1 LIMIT 1"
+      let sql = "SELECT id FROM users WHERE id = $1 LIMIT 1"
       let res = db.exec(statement: sql, params: [id])
       let count = res.numTuples()
       res.clear()

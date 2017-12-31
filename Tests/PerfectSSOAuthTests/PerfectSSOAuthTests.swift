@@ -137,7 +137,7 @@ class PerfectSSOAuthTests: XCTestCase {
     _ = pg.exec(statement: "DROP TABLE \(table)")
     _ = pg.exec(statement: "DROP TABLE tickets")
     do {
-      let udb = try UDBPostgreSQL<Profile>(connection: pgconnection, table: "users", sample: profile)
+      let udb = try UDBPostgreSQL<Profile>(connection: pgconnection, sample: profile)
       testStandard(udb: udb, label: "postgresql")
     } catch {
       XCTFail(error.localizedDescription)
@@ -153,7 +153,7 @@ class PerfectSSOAuthTests: XCTestCase {
     _ = mysql.query(statement: "DROP TABLE tickets")
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
-       password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
+       password: mysql_pwd, database: mysql_dbt, sample: profile)
       testStandard(udb: udb, label: "mariadb")
     } catch {
       XCTFail(error.localizedDescription)
@@ -169,7 +169,7 @@ class PerfectSSOAuthTests: XCTestCase {
     _ = mysql.query(statement: "DROP TABLE tickets")
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
-      password: mysql_pwd, database: mysql_dbt, table: table, sample: profile)
+      password: mysql_pwd, database: mysql_dbt, sample: profile)
       testStandard(udb: udb, label: "mysql")
     } catch {
       XCTFail(error.localizedDescription)
@@ -178,7 +178,7 @@ class PerfectSSOAuthTests: XCTestCase {
   func testSQLite() {
     unlink(sqlite)
     do {
-      let udb = try UDBSQLite<Profile>(path: sqlite, table: table, sample: profile)
+      let udb = try UDBSQLite<Profile>(path: sqlite, sample: profile)
       testStandard(udb: udb, label: "sqlite")
     } catch {
       XCTFail(error.localizedDescription)

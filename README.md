@@ -134,10 +134,12 @@ Once got the Profile design, you can start database connections when it is ready
 Database|Example
 --------|---------
 JSONFile|`let udb = try UDBJSONFile<Profile>(directory: "/path/to/users")`
-SQLite|` let udb = try UDBSQLite<Profile>(path: "/path/to/db", table: "users", sample: profile)`
-MySQL|`let udb = try UDBMySQL<Profile>(host: "127.0.0.1", user: "root",password: "secret", database: "test", table: "users", sample: profile)`
-MariaDB|`let udb = try UDBMariaDB<Profile>(host: "127.0.0.1", user: "root",password: "secret", database: "test", table: "users", sample: profile)`
-PostgreSQL|`let udb = try UDBPostgreSQL<Profile>(connection: "postgresql://user:password@localhost/testdb", table: "users", sample: profile)`
+SQLite|` let udb = try UDBSQLite<Profile>(path: "/path/to/db", sample: profile)`
+MySQL|`let udb = try UDBMySQL<Profile>(host: "127.0.0.1", user: "root",password: "secret", database: "test", sample: profile)`
+MariaDB|`let udb = try UDBMariaDB<Profile>(host: "127.0.0.1", user: "root",password: "secret", database: "test", sample: profile)`
+PostgreSQL|`let udb = try UDBPostgreSQL<Profile>(connection: "postgresql://user:password@localhost/testdb", sample: profile)`
+
+***NOTE** For databases such as SQLite, MySQL, MariaDB and PostgreSQL, drivers will setup two tables - "users" and "tickets" - for management purposes.
 
 ### Log Settings
 
