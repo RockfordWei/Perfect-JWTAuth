@@ -56,6 +56,9 @@ public class UDBSQLite<Profile>: UserDatabase {
     id TEXT PRIMARY KEY NOT NULL,
     expiration INTEGER)
     """)
+    try db.execute(statement: """
+    CREATE INDEX IF NOT EXISTS ticket_exp ON tickets( expiration)
+    """)
   }
 
   deinit {

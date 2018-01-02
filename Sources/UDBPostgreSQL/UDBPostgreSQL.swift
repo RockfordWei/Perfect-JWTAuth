@@ -59,6 +59,16 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     guard s2 == .commandOK || s2 == .tuplesOK else {
       throw Exception.fault(r2)
     }
+    let sql3 = """
+    CREATE INDEX IF NOT EXISTS ticket_exp ON tickets( expiration)
+    """
+    let result3 = try db.execute(statement: sql3)
+    let s3 = result3.status()
+    let r3 = result3.errorMessage()
+    result3.clear()
+    guard s3 == .commandOK || s3 == .tuplesOK else {
+      throw Exception.fault(r3)
+    }
   }
 
   deinit {

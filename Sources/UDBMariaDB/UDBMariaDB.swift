@@ -71,6 +71,12 @@ public class UDBMariaDB<Profile>: UserDatabase {
     guard db.query(statement: sql2) else {
       throw Exception.fault("tickets table creation failure")
     }
+    let sql3 = """
+    CREATE INDEX IF NOT EXISTS ticket_exp ON tickets( expiration)
+    """
+    guard db.query(statement: sql3) else {
+      throw Exception.fault("tickets index creation failure")
+    }
   }
 
   deinit {
