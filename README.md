@@ -291,7 +291,8 @@ Login manager also provides an optional parameter inside of the `verify` functio
 ``` swift
 let (header, content) = try man.verify(id: username, token: token, logout: true)
 
-// if success, both header and content value is still be readable but token will be no longer valid.
+// if success, both header and content value is still be readable,
+// but the token is no longer valid.
 ```
 
 **NOTE** 

@@ -106,24 +106,43 @@ public class FileLogger: LogManager {
   }
 }
 
+/// A utility class for Swift - ANSI SQL object mapping
 public final class DataworkUtility {
 
+  /// A descriptor of an ANSI SQL table field / column
   public struct Field {
+
+    /// field name
     public var name = ""
+
+    /// field type
     public var `type` = ""
+
+    /// a sample row value
     public var value: Any
+
+    /// a basic constructor - without sample values
     public init(name: String, `type`: String) {
       self.name = name
       self.type = `type`
       self.value = 0
     }
+
+    /// a complete constructor - with a sample value
     public init(name: String, `type`: String, value: Any) {
       self.name = name
       self.type = `type`
       self.value = value
     }
   }
+
+  /// a json encoder for the conversion from a Swift structure to an ANSI SQL table
   public static let encoder = JSONEncoder()
+
+  /// convert a codable profile to an array of fields
+  /// - parameter of: a codable profile to convert
+  /// - returns: an array of fields
+  /// - throws: Exception
   public static func explainProperties<Profile: Codable>(of: Profile) throws -> [Field] {
     let data = try encoder.encode(of)
     guard let json = String.init(bytes: data, encoding: .utf8),
@@ -140,6 +159,10 @@ public final class DataworkUtility {
     return result
   }
 
+  /// a simple mapping of Swift data types to ANSI SQL data types.
+  /// **NOTE**: `String` has been converted to `VARCHAR(256)`, so please adjust the length if need.
+  /// - parameter swiftTypeName: the swift type name to look for
+  /// - returns: the ANSI SQL data type name, if possible.
   public static func ANSITypeOf(_ swiftTypeName: String) -> String? {
     let typeMap: [String: String] = [
       "String": "VARCHAR(256)",
