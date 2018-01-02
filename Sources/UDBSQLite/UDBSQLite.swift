@@ -12,6 +12,16 @@ public class UDBSQLite<Profile>: UserDatabase {
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
   internal let fields: [Field]
+  internal var touch: time_t
+
+  internal func autoflush() throws {
+    let now = time(nil)
+    if now - touch > DataworkUtility.recyclingSpan {
+      try flush()
+      touch = now
+    }
+  }
+  
   /// Create a database connection and attach the user table
   /// - parameters:
   ///   - path: the file path of the sqlite3 database
@@ -23,6 +33,8 @@ public class UDBSQLite<Profile>: UserDatabase {
     db = try SQLite(path)
     encoder = JSONEncoder()
     decoder = JSONDecoder()
+    touch = time(nil)
+
     let properties = try DataworkUtility.explainProperties(of: sample)
     guard !properties.isEmpty else {
       throw Exception.fault("invalid profile structure")
@@ -70,6 +82,8 @@ public class UDBSQLite<Profile>: UserDatabase {
       throw Exception.fault("ticket has already expired")
     }
     try lock.doWithLock {
+      try self.autoflush()
+
       try db.execute(statement: "INSERT INTO tickets(id, expiration) VALUES (?, ?)") {
         stmt in
         try stmt.bind(position: 1, ticket)
@@ -80,6 +94,8 @@ public class UDBSQLite<Profile>: UserDatabase {
 
   public func cancel(_ ticket: String) throws {
     try lock.doWithLock {
+      try self.autoflush()
+
       try db.execute(statement: "DELETE FROM tickets WHERE id = ?") {
         stmt in
         try stmt.bind(position: 1, ticket)
@@ -89,6 +105,8 @@ public class UDBSQLite<Profile>: UserDatabase {
 
   public func isValid(_ ticket: String) -> Bool {
     let count = (try? lock.doWithLock {
+      try self.autoflush()
+
       var count = 0
       let sql = "SELECT id FROM tickets WHERE id = ? LIMIT 1"
       try self.db.forEachRow(statement: sql,
@@ -102,12 +120,10 @@ public class UDBSQLite<Profile>: UserDatabase {
     return count > 0
   }
 
-  public func flush() throws {
-    try lock.doWithLock {
-      try db.execute(statement: "DELETE FROM tickets WHERE expiration < ?") {
-        stmt in
-        try stmt.bind(position: 1, time(nil))
-      }
+  internal func flush() throws {
+    try db.execute(statement: "DELETE FROM tickets WHERE expiration < ?") {
+      stmt in
+      try stmt.bind(position: 1, time(nil))
     }
   }
 

@@ -31,7 +31,16 @@ public class UDBMySQL<Profile>: UserDatabase {
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
   internal let fields: [Field]
+  internal var touch: time_t
 
+  internal func autoflush() throws {
+    let now = time(nil)
+    if now - touch > DataworkUtility.recyclingSpan {
+      try flush()
+      touch = now
+    }
+  }
+  
   public init<Profile: Codable>
     (host: String, user: String, password: String,
      database: String,  sample: Profile) throws {
@@ -39,6 +48,8 @@ public class UDBMySQL<Profile>: UserDatabase {
     db = MySQL()
     encoder = JSONEncoder()
     decoder = JSONDecoder()
+    touch = time(nil)
+
     guard db.setOption(.MYSQL_SET_CHARSET_NAME, "utf8mb4"),
       db.connect(host: host, user: user, password: password, db: database) else {
         throw Exception.fault("connection failure")
@@ -88,6 +99,7 @@ public class UDBMySQL<Profile>: UserDatabase {
       throw Exception.fault("ticket has already expired")
     }
     try lock.doWithLock {
+      try self.autoflush()
       let sql = "INSERT INTO tickets(id, expiration) VALUES (?, ?)"
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
@@ -105,6 +117,7 @@ public class UDBMySQL<Profile>: UserDatabase {
 
   public func cancel(_ ticket: String) throws {
     try lock.doWithLock {
+      try self.autoflush()
       let sql = "DELETE FROM tickets WHERE id = ?"
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
@@ -121,6 +134,7 @@ public class UDBMySQL<Profile>: UserDatabase {
 
   public func isValid(_ ticket: String) -> Bool {
     let count = (try? lock.doWithLock {
+      try self.autoflush()
       let stmt = MySQLStmt(db)
       defer { stmt.close() }
       let sql = "SELECT id FROM tickets WHERE id = ? LIMIT 1"
@@ -137,19 +151,17 @@ public class UDBMySQL<Profile>: UserDatabase {
     return count > 0
   }
 
-  public func flush() throws {
-    try lock.doWithLock {
-      let sql = "DELETE FROM tickets WHERE expiration < ?"
-      let stmt = MySQLStmt(db)
-      defer { stmt.close() }
-      guard stmt.prepare(statement: sql)
-        else {
-          throw Exception.fault(db.errorMessage())
-      }
-      stmt.bindParam(time(nil))
-      guard stmt.execute() else {
+  internal func flush() throws {
+    let sql = "DELETE FROM tickets WHERE expiration < ?"
+    let stmt = MySQLStmt(db)
+    defer { stmt.close() }
+    guard stmt.prepare(statement: sql)
+      else {
         throw Exception.fault(db.errorMessage())
-      }
+    }
+    stmt.bindParam(time(nil))
+    guard stmt.execute() else {
+      throw Exception.fault(db.errorMessage())
     }
   }
 

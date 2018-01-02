@@ -303,9 +303,7 @@ let (header, content) = try man.verify(id: username, token: token, logout: true)
 // but the token is no longer valid.
 ```
 
-**NOTE** 
-1. Login manager cannot logout a foreign token.
-2. This function can be enable only the token recycler daemon thread is working. See [token recycler](#token-recycler) for more information.
+**NOTE** It is not possible to logout a foreign token.
 
 #### Load User Profile 
 
@@ -349,7 +347,7 @@ public class LoginManager<Profile> where Profile: Codable {
   log: LogManager? = nil,
   rate: RateLimiter? = nil,
   pass: LoginQualityControl? = nil,
-  recycle: UInt32 = 0)
+  recycle: Int = 0)
 }
 ```
 
@@ -419,23 +417,9 @@ public protocol LoginQualityControl {
 
 ### Token Recycler
 
-`LoginManager` can cancel any previously issued tokens if a "Token Recycler Daemon Thread" is working. 
-To enable a token recycler thread, just set the constructor parameter `recycle` to a non-zero integer, which means that the daemon will periodically clean up all expired tokens and the period between two adjacent flushing operations will be set to this `recycle` time span, in seconds. 
+`LoginManager` can cancel any previously issued tokens. You can customize the token recycling time span by set the `recycle` parameter, in seconds, and 60 by default.
 
-**CAUTION** This feature is still experimental, especially on the JSON file driver, which implement the ticket management protocol in memory and is subject to the issued token quantity level:
-1. You can safely disable it by skipping this parameter which implicitly sets the `recycle` value to zero, but all tokens will be wildly valid until naturally expired.
-2. If the `recycle` value is too small, then the daemon thread may take an unexpected percent of CPU usage.
-3. If the `recycle` value is too large, then the accumulating garbage may not be acceptable before each flushing, although it could only happen in JSON file because all issued tickets are residing in the memory. Other database drivers should be fine with a larger `recycle` value.
-4. If using JSON file as the database driver while not allowing SSO as foreign tokens, natively, all token issued are valid only when the `LoginManager` instance is alive.
-5. The recycling daemon thread might die if some critical accidents happened, e.g., memory run out.
-
-To calculate the best balance of a `recycle` time value, in seconds, to enable the token logout function, check the design pattern below:
-- the token issued are managed by its `content["jit"]`, as a uuid string, or "ticket", in short. So each ticket may need 40 bytes at least. The JSON file driver is using a special algorithm called "reversible hash tables" to store the tickets, so every ticket may take about 80 bytes.
-- every `login()` or `renew()` method will generate a new "ticket". This means if there is a load of 1,000 new logged different users access in per second, the memory usage will increase at least 80KB per seconds as well.
-- the "ticket" is storing either in memory (as JSON file) or as a single table (as other databases), with its expiration timestamp (as a 32 bit integer)
-- If expired, the "ticket" will be deleted after every `recycle` break. During the break, the daemon thread is sleeping.
-
-So in a general speaking, a value of 30 or 60 seconds of `recycle` should work for small load (< 1,000 user access per second).
+**NOTE** a smaller recycling timeout may result in a bigger system usage.
 
 ## Customize Your Own Database Drivers
 

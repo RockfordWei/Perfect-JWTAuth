@@ -12,6 +12,15 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
   internal let fields: [Field]
+  internal var touch: time_t
+
+  internal func autoflush() throws {
+    let now = time(nil)
+    if now - touch > DataworkUtility.recyclingSpan {
+      try flush()
+      touch = now
+    }
+  }
 
   public init<Profile: Codable>
     (connection: String, sample: Profile) throws {
@@ -20,6 +29,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     guard status == .ok else {
       throw Exception.fault("Connection Failure, please check the connection string " + connection)
     }
+    touch = time(nil)
     lock = Threading.Lock()
     encoder = JSONEncoder()
     decoder = JSONDecoder()
@@ -80,6 +90,8 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       throw Exception.fault("ticket has already expired")
     }
     try lock.doWithLock {
+      try self.autoflush()
+
       let sql = "INSERT INTO tickets(id, expiration) VALUES ($1, $2)"
       let result = db.exec(statement: sql, params: [ticket, expiration])
       let s = result.status()
@@ -93,6 +105,8 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
 
   public func cancel(_ ticket: String) throws {
     try lock.doWithLock {
+      try self.autoflush()
+
       let sql = "DELETE FROM tickets WHERE id = $1"
       let result = db.exec(statement: sql, params: [ticket])
       let s = result.status()
@@ -106,6 +120,8 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
 
   public func isValid(_ ticket: String) -> Bool {
     return lock.doWithLock {
+      try? self.autoflush()
+
       let sql = "SELECT id FROM tickets WHERE id = $1 LIMIT 1"
       let res = db.exec(statement: sql, params: [ticket])
       let count = res.numTuples()
@@ -114,16 +130,14 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     }
   }
 
-  public func flush() throws {
-    try lock.doWithLock {
-      let sql = "DELETE FROM tickets WHERE expiration < $1"
-      let result = db.exec(statement: sql, params: [time(nil)])
-      let s = result.status()
-      let r = result.errorMessage()
-      result.clear()
-      guard s == .commandOK || s == .tuplesOK else {
-        throw Exception.fault(r)
-      }
+  internal func flush() throws {
+    let sql = "DELETE FROM tickets WHERE expiration < $1"
+    let result = db.exec(statement: sql, params: [time(nil)])
+    let s = result.status()
+    let r = result.errorMessage()
+    result.clear()
+    guard s == .commandOK || s == .tuplesOK else {
+      throw Exception.fault(r)
     }
   }
 

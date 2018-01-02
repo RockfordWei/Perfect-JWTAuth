@@ -1,7 +1,6 @@
 import PerfectLib
 import PerfectCrypto
 import Foundation
-import Dispatch
 
 /// A container structure to hold a user record.
 public struct UserRecord<Profile>: Codable where Profile: Codable {
@@ -129,10 +128,6 @@ public protocol UserDatabase {
   /// test if the giving ticket is valid
   /// - parameter ticket: the ticket to check
   func isValid(_ ticket: String) -> Bool
-
-  /// recycle all expired tickets inside of the database
-  /// - throws: Exception
-  func flush() throws
 }
 
 /// a protocol that monitors unusual user behaviours, such as excessive access, etc.
@@ -243,7 +238,6 @@ public class LoginManager<Profile> where Profile: Codable {
   internal let _log: LogManager
   internal let _rate: RateLimiter
   internal let _pass: LoginQualityControl
-  internal let _recycle: UInt32
 
   typealias U = UserRecord<Profile>
   internal let _insert: (_ record: U ) throws -> Void
@@ -253,7 +247,6 @@ public class LoginManager<Profile> where Profile: Codable {
   internal let _issue: (_ ticket: String, _ expiration: time_t) throws -> Void
   internal let _cancel: (_ ticket: String) throws -> Void
   internal let _isValid: (_ ticket: String) -> Bool
-  internal let _flush: () throws -> Void
   /// every instance of LoginManager has a unique manager id, in form of uuid
   public var globalId: String { return _managerID }
 
@@ -268,7 +261,7 @@ public class LoginManager<Profile> where Profile: Codable {
   ///   - log: a log manager if applicable, default nil for logging to the console.
   ///   - rate: a RateLimiter. Any user operations, such as access, update or token renew, will call the rate limiter first. By default it is unlimited
   ///   - pass: a login / password quality control, will call before any password updates. No password quality control by default.
-  ///   - recycle: the waiting period to run the ticket recycler, in seconds. If 0 by default, the login manager will not start the ticket recycle task and all tickets issued will be valid in expiration even cancelled (logout)
+  ///   - recycle: the waiting period to recycle the expired tickets, in seconds. If 0 or skipped, it will be set to 60 seconds by default
   public init(cipher: Cipher = .aes_256_cbc, keyIterations: Int = 1024,
               digest: Digest = .md5, saltLength: Int = 16,
               alg: JWT.Alg = .hs256,
@@ -276,7 +269,7 @@ public class LoginManager<Profile> where Profile: Codable {
               log: LogManager? = nil,
               rate: RateLimiter? = nil,
               pass: LoginQualityControl? = nil,
-              recycle: UInt32 = 0) {
+              recycle: Int = 0) {
     _cipher = cipher
     _keyIterations = keyIterations
     _digest = digest
@@ -295,7 +288,6 @@ public class LoginManager<Profile> where Profile: Codable {
     _issue = udb.issue
     _cancel = udb.cancel
     _isValid = udb.isValid
-    _flush = udb.flush
     if let limiter = rate {
       _rate = limiter
     } else {
@@ -306,22 +298,7 @@ public class LoginManager<Profile> where Profile: Codable {
     } else {
       _pass = HumblestLoginControl()
     }
-    _recycle = recycle
-    if _recycle > 0 {
-      let q = DispatchQueue(label: _managerID)
-      q.async {
-        while self._recycle > 0 {
-          sleep(self._recycle)
-          do {
-            try self._flush()
-          } catch (let err) {
-            self._log.report("system", level: .critical, event: .system,
-            message: "ticket recycler is stopped for " + err.localizedDescription)
-            break
-          }
-        }
-      }
-    }
+    DataworkUtility.recyclingSpan = recycle > 0 ? recycle: 60
   }
 
   /// register a new user record. Would log a register event on an available log filer.
@@ -523,7 +500,7 @@ public class LoginManager<Profile> where Profile: Codable {
     }
 
     var needlog = true
-    if iss == _managerID && self._recycle > 0 {
+    if iss == _managerID {
       if logout {
         do {
           try _cancel(ticket)
@@ -559,9 +536,7 @@ public class LoginManager<Profile> where Profile: Codable {
       "exp": expiration, "nbf": now, "iat": now, "jit": ticket
     ]
 
-    if self._recycle > 0 {
-      try _issue(ticket, expiration)
-    }
+    try _issue(ticket, expiration)
 
     guard let jwt = JWTCreator(payload: claims) else {
       _log.report(u.id, level: .critical, event: .login,

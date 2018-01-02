@@ -21,12 +21,22 @@ public class UDBJSONFile<Profile>: UserDatabase {
 
   internal var tickets: [String: time_t] = [:]
   internal var ticketsReversed: [time_t: Set<String>] = [:]
+  internal var touch: time_t
+
+  internal func autoflush() throws {
+    let now = time(nil)
+    if now - touch > DataworkUtility.recyclingSpan {
+      try flush()
+      touch = now
+    }
+  }
 
   public func issue(_ ticket: String, _ expiration: time_t) throws {
     guard expiration > time(nil) else {
       throw Exception.fault("ticket has already expired")
     }
-    lock.doWithLock {
+    try lock.doWithLock {
+      try self.autoflush()
       tickets[ticket] = expiration
       var set: Set<String>
       if let s = ticketsReversed[expiration] {
@@ -41,6 +51,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
 
   public func cancel(_ ticket: String) throws {
     try lock.doWithLock {
+      try self.autoflush()
       guard let timekey = tickets[ticket],
         var set = ticketsReversed[timekey] else {
           throw Exception.fault("ticket not found")
@@ -57,6 +68,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
 
   public func isValid(_ ticket: String) -> Bool {
     return lock.doWithLock {
+      try? self.autoflush()
       if let _ = tickets[ticket] {
         return true
       } else {
@@ -65,16 +77,14 @@ public class UDBJSONFile<Profile>: UserDatabase {
     }
   }
 
-  public func flush() throws {
-    lock.doWithLock {
-      let keys = ticketsReversed.keys.sorted()
-      let now = time(nil)
-      for t in keys {
-        if now > t { break }
-        guard let set = ticketsReversed[t] else { continue }
-        set.forEach { _ = tickets.removeValue(forKey: $0) }
-        _ = ticketsReversed.removeValue(forKey: t)
-      }
+  internal func flush() throws {
+    let keys = ticketsReversed.keys.sorted()
+    let now = time(nil)
+    for t in keys {
+      if now > t { break }
+      guard let set = ticketsReversed[t] else { continue }
+      set.forEach { _ = tickets.removeValue(forKey: $0) }
+      _ = ticketsReversed.removeValue(forKey: t)
     }
   }
 
@@ -125,6 +135,8 @@ public class UDBJSONFile<Profile>: UserDatabase {
         throw Exception.fault("operation failure")
       }
     }
+    touch = time(nil)
+
     folder = directory
     encoder = JSONEncoder()
     decoder = JSONDecoder()

@@ -138,7 +138,7 @@ public final class DataworkUtility {
 
   /// a json encoder for the conversion from a Swift structure to an ANSI SQL table
   public static let encoder = JSONEncoder()
-
+  public static var recyclingSpan = 60 // in seconds.
   /// convert a codable profile to an array of fields
   /// - parameter of: a codable profile to convert
   /// - returns: an array of fields
