@@ -106,6 +106,14 @@ import UDBMySQL|User database driven by MySQL
 import UDBMariaDB|User database driven by MariaDB
 import UDBPostgreSQL|User database driven by PostgreSQL
 
+### Runtime Initialization
+
+**NOTE** If there is no other libraries, such as Perfect-HTTP Server, to initiliaze the Perfect-Crypto lib, you would have to manually turn it on:
+
+``` swift
+_ = PerfectCrypto.isInitialized
+```
+
 ### Customizable Profile
 
 Perfect-SSO is a using generic template class to deal with database and user authentications, which means you **MUST** write your own user profile structure.
