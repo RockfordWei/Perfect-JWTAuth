@@ -1,6 +1,7 @@
 import PerfectLib
 import PerfectCrypto
 import Foundation
+import Dispatch
 
 /// A container structure to hold a user record.
 public struct UserRecord<Profile>: Codable where Profile: Codable {
@@ -250,6 +251,8 @@ public class LoginManager<Profile> where Profile: Codable {
   /// every instance of LoginManager has a unique manager id, in form of uuid
   public var globalId: String { return _managerID }
 
+  internal let _lock: DispatchSemaphore
+
   /// constructor of a Login Manager
   /// - parameters:
   ///   - cipher: a cipher algorithm to do the password encryption. AES_252_CBC by default.
@@ -298,6 +301,7 @@ public class LoginManager<Profile> where Profile: Codable {
     } else {
       _pass = HumblestLoginControl()
     }
+    _lock = DispatchSemaphore(value: 1)
     DataworkUtility.recyclingSpan = recycle > 0 ? recycle: 60
   }
 
@@ -327,10 +331,13 @@ public class LoginManager<Profile> where Profile: Codable {
         throw Exception.fault("crypto failure")
     }
     let u = UserRecord<Profile>(id: usr, salt: salt, shadow: shadow, profile: profile)
+    _lock.wait()
     do {
       try _insert(u)
+      _lock.signal()
     } catch (let err) {
       _log.report(id, level: .warning, event: .registration, message: err.localizedDescription)
+      _lock.signal()
       throw err
     }
     _log.report(id, level: .event, event: .registration, message: "user registered")
@@ -361,12 +368,15 @@ public class LoginManager<Profile> where Profile: Codable {
         throw Exception.fault("crypto failure")
     }
     do {
+      _lock.wait()
       var u = try self._select(id)
       u.salt = salt
       u.shadow = shadow
       try self._update(u)
+      _lock.signal()
     } catch (let err) {
       _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
+      _lock.signal()
       throw err
     }
     _log.report(id, level: .event, event: .updating, message: "password updated")
@@ -386,12 +396,17 @@ public class LoginManager<Profile> where Profile: Codable {
     }
     let usr = id.stringByEncodingURL
     do {
+      _lock.wait()
       var u = try self._select(usr)
+      _lock.signal()
       try _rate.onUpdate(u)
       u.profile = profile
+      _lock.wait()
       try self._update(u)
+      _lock.signal()
     } catch (let err) {
       _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
+      _lock.signal()
       throw err
     }
     _log.report(id, level: .event, event: .updating, message: "profile updated")
@@ -421,10 +436,13 @@ public class LoginManager<Profile> where Profile: Codable {
     let pwd = password.stringByEncodingURL
     let u: U
     do {
+      _lock.wait()
       u = try _select(usr)
+      _lock.signal()
       try _rate.onLogin(u)
     } catch (let err) {
       _log.report(id, level: .warning, event: .login, message: err.localizedDescription)
+      _lock.signal()
       throw err
     }
     guard
@@ -465,7 +483,9 @@ public class LoginManager<Profile> where Profile: Codable {
     let usr = id.stringByEncodingURL
     let u: U
     do {
+      _lock.wait()
       u = try _select(usr)
+      _lock.signal()
     } catch (let err) {
       _log.report(id, level: .warning, event: .verification, message: err.localizedDescription)
       throw err
@@ -503,15 +523,21 @@ public class LoginManager<Profile> where Profile: Codable {
     if iss == _managerID {
       if logout {
         do {
+          _lock.wait()
           try _cancel(ticket)
+          _lock.signal()
           _log.report(id, level: .event, event: .logoff, message: nil )
         } catch (let err) {
           _log.report(id, level: .warning, event: .logoff,
                       message: "log out failure:" + err.localizedDescription )
+          _lock.signal()
         }
         needlog = false
       } else {
-        guard _isValid(ticket) else {
+        _lock.wait()
+        let valid = _isValid(ticket)
+        _lock.signal()
+        guard valid else {
           _log.report(id, level: .warning, event: .verification,
                       message: "jwt valid but ticket is either expired or cancelled")
           throw Exception.fault("invalid ticket")
@@ -536,7 +562,9 @@ public class LoginManager<Profile> where Profile: Codable {
       "exp": expiration, "nbf": now, "iat": now, "jit": ticket
     ]
 
+    _lock.wait()
     try _issue(ticket, expiration)
+    _lock.signal()
 
     guard let jwt = JWTCreator(payload: claims) else {
       _log.report(u.id, level: .critical, event: .login,
@@ -576,7 +604,9 @@ public class LoginManager<Profile> where Profile: Codable {
     }
     let u: U
     do {
+      _lock.wait()
       u = try _select(id)
+      _lock.signal()
       try _rate.onRenewToken(u)
     } catch (let err) {
       _log.report(id, level: .warning, event: .renewal, message: err.localizedDescription)
@@ -590,7 +620,15 @@ public class LoginManager<Profile> where Profile: Codable {
   /// - throws: Exception
   /// - returns: the user profile
   public func load(id: String) throws -> Profile {
-    return try _select(id).profile
+    do {
+      _lock.wait()
+      let p = try _select(id).profile
+      _lock.signal()
+      return p
+    } catch {
+      _lock.signal()
+      throw error
+    }
   }
   
   /// drop a user record by its id
@@ -600,10 +638,13 @@ public class LoginManager<Profile> where Profile: Codable {
     do {
       try _pass.goodEnough(userId: id)
       try _rate.onDeletion(id)
+      _lock.wait()
       try _delete(id)
+      _lock.signal()
       _log.report(id, level: .event, event: .unregistration, message: "user closed")
     } catch (let err) {
       _log.report(id, level: .warning, event: .unregistration, message: err.localizedDescription)
+      _lock.signal()
       throw err
     }
   }

@@ -1,4 +1,3 @@
-import PerfectThread
 import PerfectSSOAuth
 import Foundation
 import MariaDB
@@ -26,17 +25,16 @@ extension MySQLStmt {
 }
 public class UDBMariaDB<Profile>: UserDatabase {
 
-  internal let lock: Threading.Lock
   internal let db: MySQL
   internal let encoder: JSONEncoder
   internal let decoder: JSONDecoder
   internal let fields: [Field]
   internal var touch: time_t
 
-  internal func autoflush() throws {
+  internal func autoflush() {
     let now = time(nil)
     if now - touch > DataworkUtility.recyclingSpan {
-      try flush()
+      flush()
       touch = now
     }
   }
@@ -44,7 +42,6 @@ public class UDBMariaDB<Profile>: UserDatabase {
   public init<Profile: Codable>
     (host: String, user: String, password: String,
      database: String, sample: Profile) throws {
-    lock = Threading.Lock()
     db = MySQL()
     encoder = JSONEncoder()
     decoder = JSONDecoder()
@@ -98,92 +95,82 @@ public class UDBMariaDB<Profile>: UserDatabase {
     guard expiration > time(nil) else {
       throw Exception.fault("ticket has already expired")
     }
-    try lock.doWithLock {
-      try self.autoflush()
+    self.autoflush()
 
-      let sql = "INSERT INTO tickets(id, expiration) VALUES (?, ?)"
-      let stmt = MySQLStmt(db)
-      defer { stmt.close() }
-      guard stmt.prepare(statement: sql)
-        else {
-          throw Exception.fault(db.errorMessage())
-      }
-      stmt.bindParam(ticket)
-      stmt.bindParam(expiration)
-      guard stmt.execute() else {
-        throw Exception.fault(db.errorMessage())
-      }
-    }
-  }
-
-  public func cancel(_ ticket: String) throws {
-    try lock.doWithLock {
-      try self.autoflush()
-
-      let sql = "DELETE FROM tickets WHERE id = ?"
-      let stmt = MySQLStmt(db)
-      defer { stmt.close() }
-      guard stmt.prepare(statement: sql)
-        else {
-          throw Exception.fault(db.errorMessage())
-      }
-      stmt.bindParam(ticket)
-      guard stmt.execute() else {
-        throw Exception.fault(db.errorMessage())
-      }
-    }
-  }
-
-  public func isValid(_ ticket: String) -> Bool {
-    let count = (try? lock.doWithLock {
-      try self.autoflush()
-
-      let stmt = MySQLStmt(db)
-      defer { stmt.close() }
-      let sql = "SELECT id FROM tickets WHERE id = ? LIMIT 1"
-      guard stmt.prepare(statement:sql)
-        else {
-          throw Exception.fault(db.errorMessage())
-      }
-      stmt.bindParam(ticket)
-      guard stmt.execute() else {
-        throw Exception.fault(db.errorMessage())
-      }
-      return stmt.results().numRows
-      }) ?? 0
-    return count > 0
-  }
-
-  internal func flush() throws {
-    let sql = "DELETE FROM tickets WHERE expiration < ?"
+    let sql = "INSERT INTO tickets(id, expiration) VALUES (?, ?)"
     let stmt = MySQLStmt(db)
     defer { stmt.close() }
     guard stmt.prepare(statement: sql)
       else {
         throw Exception.fault(db.errorMessage())
     }
-    stmt.bindParam(time(nil))
+    stmt.bindParam(ticket)
+    stmt.bindParam(expiration)
     guard stmt.execute() else {
       throw Exception.fault(db.errorMessage())
     }
   }
 
-  internal func exists(_ id: String) -> Bool {
-    let count = (try? lock.doWithLock {
-      let stmt = MySQLStmt(db)
-      defer { stmt.close() }
-      let sql = "SELECT id FROM users WHERE id = ? LIMIT 1"
-      guard stmt.prepare(statement:sql)
-        else {
-          throw Exception.fault(db.errorMessage())
-      }
-      stmt.bindParam(id)
-      guard stmt.execute() else {
+  public func cancel(_ ticket: String) throws {
+    self.autoflush()
+
+    let sql = "DELETE FROM tickets WHERE id = ?"
+    let stmt = MySQLStmt(db)
+    defer { stmt.close() }
+    guard stmt.prepare(statement: sql)
+      else {
         throw Exception.fault(db.errorMessage())
-      }
-      return stmt.results().numRows
-      }) ?? 0
-    return count > 0
+    }
+    stmt.bindParam(ticket)
+    guard stmt.execute() else {
+      throw Exception.fault(db.errorMessage())
+    }
+  }
+
+  public func isValid(_ ticket: String) -> Bool {
+    self.autoflush()
+
+    let stmt = MySQLStmt(db)
+    defer { stmt.close() }
+    let sql = "SELECT id FROM tickets WHERE id = ? LIMIT 1"
+    guard stmt.prepare(statement:sql)
+      else {
+        return false
+    }
+    stmt.bindParam(ticket)
+    guard stmt.execute() else {
+      return false
+    }
+    return stmt.results().numRows > 0
+  }
+
+  internal func flush() {
+    let sql = "DELETE FROM tickets WHERE expiration < ?"
+    let stmt = MySQLStmt(db)
+    defer { stmt.close() }
+    guard stmt.prepare(statement: sql)
+      else {
+        return
+    }
+    stmt.bindParam(time(nil))
+    guard stmt.execute() else {
+      return
+    }
+  }
+
+  internal func exists(_ id: String) -> Bool {
+    let stmt = MySQLStmt(db)
+    defer { stmt.close() }
+    let sql = "SELECT id FROM users WHERE id = ? LIMIT 1"
+    guard stmt.prepare(statement:sql)
+      else {
+        return false
+    }
+    stmt.bindParam(id)
+    guard stmt.execute() else {
+      return false
+    }
+    return stmt.results().numRows > 0
   }
 
   public func insert<Profile>(_ record: UserRecord<Profile>) throws {
@@ -196,29 +183,27 @@ public class UDBMariaDB<Profile>: UserDatabase {
       let dic = try json.jsonDecode() as? [String: Any] else {
         throw Exception.fault("json encoding failure")
     }
-    try lock.doWithLock {
-      let properties:[String] = fields.map { $0.name }
-      let columns = ["id", "salt", "shadow"] + properties
-      let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
-      let col = columns.joined(separator: ",")
-      let que = qmarks.joined(separator: ",")
-      let sql = "INSERT INTO users (\(col)) VALUES(\(que))"
-      let stmt = MySQLStmt(db)
-      defer { stmt.close() }
-      guard stmt.prepare(statement: sql)
-        else {
-          throw Exception.fault(db.errorMessage())
-      }
-      stmt.bindParam(record.id)
-      stmt.bindParam(record.salt)
-      stmt.bindParam(record.shadow)
-      for p in properties {
-        guard let x = dic[p] else { continue }
-        try stmt.bindParameter(x)
-      }
-      guard stmt.execute() else {
+    let properties:[String] = fields.map { $0.name }
+    let columns = ["id", "salt", "shadow"] + properties
+    let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
+    let col = columns.joined(separator: ",")
+    let que = qmarks.joined(separator: ",")
+    let sql = "INSERT INTO users (\(col)) VALUES(\(que))"
+    let stmt = MySQLStmt(db)
+    defer { stmt.close() }
+    guard stmt.prepare(statement: sql)
+      else {
         throw Exception.fault(db.errorMessage())
-      }
+    }
+    stmt.bindParam(record.id)
+    stmt.bindParam(record.salt)
+    stmt.bindParam(record.shadow)
+    for p in properties {
+      guard let x = dic[p] else { continue }
+      try stmt.bindParameter(x)
+    }
+    guard stmt.execute() else {
+      throw Exception.fault(db.errorMessage())
     }
   }
 
@@ -232,89 +217,83 @@ public class UDBMariaDB<Profile>: UserDatabase {
       let dic = try json.jsonDecode() as? [String: Any] else {
         throw Exception.fault("json encoding failure")
     }
-    try lock.doWithLock {
-      let properties:[String] = fields.map { $0.name }
-      let columns:[String] = fields.map { "\($0.name) = ?" }
-      let sentence = columns.joined(separator: ",")
-      let sql = "UPDATE users SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
-      let stmt = MySQLStmt(db)
-      defer { stmt.close() }
-      guard stmt.prepare(statement: sql) else {
-        throw Exception.fault(db.errorMessage())
-      }
-      stmt.bindParam(record.salt)
-      stmt.bindParam(record.shadow)
-      for p in properties {
-        guard let x = dic[p] else { continue }
-        try stmt.bindParameter(x)
-      }
-      stmt.bindParam(record.id)
-      guard stmt.execute() else {
-        throw Exception.fault(db.errorMessage())
-      }
+    let properties:[String] = fields.map { $0.name }
+    let columns:[String] = fields.map { "\($0.name) = ?" }
+    let sentence = columns.joined(separator: ",")
+    let sql = "UPDATE users SET salt = ?, shadow = ?, \(sentence) WHERE id = ?"
+    let stmt = MySQLStmt(db)
+    defer { stmt.close() }
+    guard stmt.prepare(statement: sql) else {
+      throw Exception.fault(db.errorMessage())
+    }
+    stmt.bindParam(record.salt)
+    stmt.bindParam(record.shadow)
+    for p in properties {
+      guard let x = dic[p] else { continue }
+      try stmt.bindParameter(x)
+    }
+    stmt.bindParam(record.id)
+    guard stmt.execute() else {
+      throw Exception.fault(db.errorMessage())
     }
   }
 
   public func select<Profile>(_ id: String) throws -> UserRecord<Profile> {
-    return try lock.doWithLock {
-      var u: UserRecord<Profile>? = nil
-      let columns:[String] = fields.map { $0.name }
-      let col = columns.joined(separator: ",")
-      let sql = "SELECT id, salt, shadow, \(col) FROM users WHERE id = ? LIMIT 1"
-      let stmt = MySQLStmt(self.db)
-      defer { stmt.close() }
-      guard stmt.prepare(statement: sql)
-        else {
-          throw Exception.fault(self.db.errorMessage())
-      }
-      stmt.bindParam(id)
-      guard stmt.execute() else { throw Exception.fault(self.db.errorMessage())}
-      let fetched = stmt.results().forEachRow { rec in
-        let _id = rec[0] as? String
-        let _salt = rec[1] as? String
-        let _shadow = rec[2] as? String
-        var dic: [String: Any] = [:]
-        for i in 0 ..< fields.count {
-          let j = i + 3
-          if let x = rec[j] {
-            dic[columns[i]] = x
-          }
-        }
-        guard
-          let id = _id, let salt = _salt, let shadow = _shadow,
-          dic.count == columns.count else {
-            return
-        }
-        do {
-          let json = try dic.jsonEncodedString()
-          let data = Data(json.utf8)
-          let profile = try decoder.decode(Profile.self, from: data)
-          u = UserRecord(id: id, salt: salt, shadow: shadow, profile: profile)
-        } catch {
-          debugPrint("json failure")
-        }
-      }
-      guard fetched, let v = u else { throw Exception.fault(self.db.errorMessage())}
-      return v
+    var u: UserRecord<Profile>? = nil
+    let columns:[String] = fields.map { $0.name }
+    let col = columns.joined(separator: ",")
+    let sql = "SELECT id, salt, shadow, \(col) FROM users WHERE id = ? LIMIT 1"
+    let stmt = MySQLStmt(self.db)
+    defer { stmt.close() }
+    guard stmt.prepare(statement: sql)
+      else {
+        throw Exception.fault(self.db.errorMessage())
     }
+    stmt.bindParam(id)
+    guard stmt.execute() else { throw Exception.fault(self.db.errorMessage())}
+    let fetched = stmt.results().forEachRow { rec in
+      let _id = rec[0] as? String
+      let _salt = rec[1] as? String
+      let _shadow = rec[2] as? String
+      var dic: [String: Any] = [:]
+      for i in 0 ..< fields.count {
+        let j = i + 3
+        if let x = rec[j] {
+          dic[columns[i]] = x
+        }
+      }
+      guard
+        let id = _id, let salt = _salt, let shadow = _shadow,
+        dic.count == columns.count else {
+          return
+      }
+      do {
+        let json = try dic.jsonEncodedString()
+        let data = Data(json.utf8)
+        let profile = try decoder.decode(Profile.self, from: data)
+        u = UserRecord(id: id, salt: salt, shadow: shadow, profile: profile)
+      } catch {
+        debugPrint("json failure")
+      }
+    }
+    guard fetched, let v = u else { throw Exception.fault(self.db.errorMessage())}
+    return v
   }
 
   public func delete(_ id: String) throws {
     guard exists(id) else {
       throw Exception.fault("user does not exist")
     }
-    try lock.doWithLock {
-      let stmt = MySQLStmt(db)
-      defer { stmt.close() }
-      let sql = "DELETE FROM users WHERE id = ?"
-      guard stmt.prepare(statement: sql)
-        else {
-          throw Exception.fault(db.errorMessage())
-      }
-      stmt.bindParam(id)
-      guard stmt.execute() else {
+    let stmt = MySQLStmt(db)
+    defer { stmt.close() }
+    let sql = "DELETE FROM users WHERE id = ?"
+    guard stmt.prepare(statement: sql)
+      else {
         throw Exception.fault(db.errorMessage())
-      }
+    }
+    stmt.bindParam(id)
+    guard stmt.execute() else {
+      throw Exception.fault(db.errorMessage())
     }
   }
 }

@@ -423,8 +423,7 @@ public protocol LoginQualityControl {
 
 ## Customize Your Own Database Drivers
 
-If you want to implement a different database driver, just make it sure to comply the `UserDatabase` protocol,
-and keep thread safe with sufficient performance all the time:
+If you want to implement a different database driver, just make it sure to comply the `UserDatabase` protocol:
 
 ``` swift
 /// A general protocol for a user database, UDB in short.

@@ -7,12 +7,10 @@ import UDBSQLite
 import UDBMySQL
 import UDBMariaDB
 import UDBPostgreSQL
-import UDBMongoDB
 import PerfectMySQL
 import PerfectPostgreSQL
-import PerfectMongoDB
-import PerfectThread
 import PerfectLib
+import Dispatch
 
 struct Profile: Codable {
   public var firstName = ""
@@ -38,15 +36,15 @@ class PerfectSSOAuthTests: XCTestCase {
   let pgconnection = "postgresql://rocky:rockford@maria/test"
 
   var users: [String: String] = [:]
+  var expects = [XCTestExpectation]()
+
   let randomSize = 1024
-  let longTestTimeout = 60.0
   static var allTests = [
     ("testJSONDir", testJSONDir),
     ("testSQLite", testSQLite),
     ("testMySQL", testMySQL),
     ("testMariaDB", testMariaDB),
     ("testPostgreSQL", testPostgreSQL),
-    ("testMongoDB", testMongoDB)
     ]
 
   override func setUp() {
@@ -63,48 +61,42 @@ class PerfectSSOAuthTests: XCTestCase {
       }
       users[u] = p
     }
+    expects.removeAll(keepingCapacity: false)
   }
 
   func testLeak(udb: UserDatabase, label: String) {
     print("preparing memory leaking test for \(label) ... may take minutes")
     let now = time(nil)
-    var expects = [XCTestExpectation]()
     let manager = LoginManager<Profile>(udb: udb, log: log)
     let prof = profile
+    let q = DispatchQueue(label: label)
+    let g = DispatchGroup()
+
     for (u,p) in users {
-      let exp = self.expectation(description: "\(label)\(u)\(p)")
-      expects.append(exp)
-      Threading.dispatch {
-        do {
+      g.enter()
+      q.async {
+        // if you found memory usage growth, use autoreleasepool to cease it.
+        // it is a fake leak so don't worry about it!
         #if os(OSX)
-          try autoreleasepool {
-            try manager.register(id: u, password: p, profile: prof)
-            let t = try manager.login(id: u, password: p)
-            _ = try manager.verify(id: u, token: t, logout: true)
+          autoreleasepool {
+            try? manager.register(id: u, password: p, profile: prof)
+            if let t = try? manager.login(id: u, password: p) {
+              _ = try? manager.verify(id: u, token: t, logout: true)
+            }
           }
         #else
-          try manager.register(id: u, password: p, profile: prof)
-          let t = try manager.login(id: u, password: p)
-          _ = try manager.verify(id: u, token: t, logout: true)
+          try? manager.register(id: u, password: p, profile: prof)
+          if let t = try? manager.login(id: u, password: p) {
+            _ = try? manager.verify(id: u, token: t, logout: true)
+          }
         #endif
-        } catch {
-          XCTFail("threading fault")
-        }
-        exp.fulfill()
-        }
-    }
-    self.waitForExpectations(timeout: longTestTimeout) { err in
-      let ok: String
-      if let e = err {
-        ok = "\(e)"
-      } else {
-        ok = "ok"
+        g.leave()
       }
-      let duration = time(nil) - now
-      print("------------ [\(ok)] long test of \(label): \(duration) seconds for \(self.randomSize) access")
-      self.log.report("system", level: .event, event: .system, message: "\(label) tested")
-      expects.removeAll(keepingCapacity: false)
     }
+    g.wait()
+    let duration = time(nil) - now
+    print("------------ long test of \(label): \(duration) seconds for \(self.randomSize) access")
+    self.log.report("system", level: .event, event: .system, message: "\(label) tested")
   }
 
   func testStandard(udb: UserDatabase, label: String) {
@@ -181,14 +173,6 @@ class PerfectSSOAuthTests: XCTestCase {
     }
   }
 
-  func testMongoDB() {
-    do {
-      _ = try UDBMongoDB<Profile>("mongodb://maria", database: "test", document: "users")
-    } catch {
-      XCTFail(error.localizedDescription)
-    }
-  }
-
   func testPostgreSQL() {
     let pg = PGConnection()
     _ = pg.connectdb(pgconnection)
@@ -241,7 +225,7 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, sample: profile)
       testStandard(udb: udb, label: "sqlite")
-      //testLeak(udb: udb, label: "sqlite")
+      testLeak(udb: udb, label: "sqlite")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -251,7 +235,7 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
       testStandard(udb: udb, label: "jsonfile")
-      //testLeak(udb: udb, label: "jsonfile")
+      testLeak(udb: udb, label: "jsonfile")
     } catch {
       XCTFail(error.localizedDescription)
     }
