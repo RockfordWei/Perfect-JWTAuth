@@ -55,8 +55,10 @@ Besides the teamwork of PerfectlySoft Inc., many improvements  and features of t
 ## Objectives
 
 - independently work without ORMs (although it includes a mini ORM actually) or even databases, while it will supports most Perfect database drivers soon.
-- extremely fast, light-weighted, scalable and thread-safe
+- extremely fast, light-weighted, simple, configurable, securied, scalable and thread-safe.
 - Session free: a full application of JWT for the single sign-on authentication to any virtual private clouds.
+
+
 
 ## SPM Configuration Note
 
