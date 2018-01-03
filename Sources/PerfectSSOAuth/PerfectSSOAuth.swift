@@ -324,7 +324,7 @@ public class LoginManager<Profile> where Profile: Codable {
     let pwd = password.stringByEncodingURL
     guard let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
-      let shadow = usr.encrypt(_cipher, password: pwd, salt: salt)
+      let shadow = pwd.encrypt(_cipher, password: pwd, salt: salt)
       else {
         _log.report(id, level: .critical, event: .registration,
                     message: "unable to register '\(id)'/'\(password)' because of encryption failure")
@@ -357,11 +357,11 @@ public class LoginManager<Profile> where Profile: Codable {
       _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
       throw err
     }
-    let usr = id.stringByEncodingURL
+    //let usr = id.stringByEncodingURL
     let pwd = password.stringByEncodingURL
     guard let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
-      let shadow = usr.encrypt(_cipher, password: pwd, salt: salt)
+      let shadow = pwd.encrypt(_cipher, password: pwd, salt: salt)
       else {
         _log.report("unknown", level: .warning, event: .updating,
                     message: "invalid update attempt '\(id)'/'\(password)'")
@@ -446,8 +446,8 @@ public class LoginManager<Profile> where Profile: Codable {
       throw err
     }
     guard
-      let decodedUsername = u.shadow.decrypt(_cipher, password: pwd, salt: u.salt),
-      decodedUsername == usr
+      let decodedPassword = u.shadow.decrypt(_cipher, password: pwd, salt: u.salt),
+      decodedPassword == pwd
       else {
         _log.report(id, level: .warning, event: .login,
                     message: "access denied")
