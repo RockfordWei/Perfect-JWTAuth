@@ -355,7 +355,7 @@ public class LoginManager<Profile> where Profile: Codable {
 
 The first section of `LoginManager` constructor is the encryption control:
 
-- cipher: a cipher algorithm to do the password encryption. AES_252_CBC by default.
+- cipher: a cipher algorithm to do the password encryption. AES_128_CBC by default.
 - keyIterations: key iteration times for encryption, 1024 by default.
 - digest: digest algorithm for encryption, MD5 by default.
 - saltLength: length to generate the salt string, 16 by default.

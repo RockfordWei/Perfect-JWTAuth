@@ -255,7 +255,7 @@ public class LoginManager<Profile> where Profile: Codable {
 
   /// constructor of a Login Manager
   /// - parameters:
-  ///   - cipher: a cipher algorithm to do the password encryption. AES_252_CBC by default.
+  ///   - cipher: a cipher algorithm to do the password encryption. AES_128_CBC by default.
   ///   - keyIterations: key iteration times for encryption, 1024 by default.
   ///   - digest: digest algorithm for encryption, MD5 by default.
   ///   - saltLength: length to generate the salt string, 16 by default.
@@ -265,7 +265,7 @@ public class LoginManager<Profile> where Profile: Codable {
   ///   - rate: a RateLimiter. Any user operations, such as access, update or token renew, will call the rate limiter first. By default it is unlimited
   ///   - pass: a login / password quality control, will call before any password updates. No password quality control by default.
   ///   - recycle: the waiting period to recycle the expired tickets, in seconds. If 0 or skipped, it will be set to 60 seconds by default
-  public init(cipher: Cipher = .aes_256_cbc, keyIterations: Int = 1024,
+  public init(cipher: Cipher = .aes_128_cbc, keyIterations: Int = 1024,
               digest: Digest = .md5, saltLength: Int = 16,
               alg: JWT.Alg = .hs256,
               udb: UserDatabase,
