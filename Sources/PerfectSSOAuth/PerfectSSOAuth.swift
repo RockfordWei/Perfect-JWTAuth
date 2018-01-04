@@ -253,6 +253,21 @@ public class LoginManager<Profile> where Profile: Codable {
 
   internal let _lock: DispatchSemaphore
 
+  fileprivate func shadow(_ password: String, salt: String) throws -> String? {
+    guard let hashData = salt.digest(.sha384) else {
+      throw Exception.fault("digest(sha384)")
+    }
+    let hashKeyData:[UInt8] = hashData[0..<32].map {$0}
+    let ivData:[UInt8] = hashData[32..<48].map {$0}
+    let data:[UInt8] = password.utf8.map { $0 }
+    guard let x = data.encrypt(self._cipher, key: hashKeyData, iv: ivData),
+      let y = x.encode(.base64)
+      else {
+        throw Exception.fault("aes(128)+base64")
+    }
+    return String(validatingUTF8: y)
+  }
+
   /// constructor of a Login Manager
   /// - parameters:
   ///   - cipher: a cipher algorithm to do the password encryption. AES_128_CBC by default.
@@ -320,17 +335,15 @@ public class LoginManager<Profile> where Profile: Codable {
       _log.report(id, level: .warning, event: .registration, message: err.localizedDescription)
       throw err
     }
-    let usr = id.stringByEncodingURL
-    let pwd = password.stringByEncodingURL
     guard let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
-      let shadow = pwd.encrypt(_cipher, password: pwd, salt: salt)
+      let shadow = try self.shadow(password, salt: salt)
       else {
         _log.report(id, level: .critical, event: .registration,
                     message: "unable to register '\(id)'/'\(password)' because of encryption failure")
         throw Exception.fault("crypto failure")
     }
-    let u = UserRecord<Profile>(id: usr, salt: salt, shadow: shadow, profile: profile)
+    let u = UserRecord<Profile>(id: id, salt: salt, shadow: shadow, profile: profile)
     _lock.wait()
     do {
       try _insert(u)
@@ -357,11 +370,9 @@ public class LoginManager<Profile> where Profile: Codable {
       _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
       throw err
     }
-    //let usr = id.stringByEncodingURL
-    let pwd = password.stringByEncodingURL
     guard let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
-      let shadow = pwd.encrypt(_cipher, password: pwd, salt: salt)
+      let shadow = try self.shadow(password, salt: salt)
       else {
         _log.report("unknown", level: .warning, event: .updating,
                     message: "invalid update attempt '\(id)'/'\(password)'")
@@ -394,10 +405,9 @@ public class LoginManager<Profile> where Profile: Codable {
       _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
       throw err
     }
-    let usr = id.stringByEncodingURL
     do {
       _lock.wait()
-      var u = try self._select(usr)
+      var u = try self._select(id)
       _lock.signal()
       try _rate.onUpdate(u)
       u.profile = profile
@@ -432,12 +442,10 @@ public class LoginManager<Profile> where Profile: Codable {
       _log.report(id, level: .warning, event: .login, message: err.localizedDescription)
       throw err
     }
-    let usr = id.stringByEncodingURL
-    let pwd = password.stringByEncodingURL
     let u: U
     do {
       _lock.wait()
-      u = try _select(usr)
+      u = try _select(id)
       _lock.signal()
       try _rate.onLogin(u)
     } catch (let err) {
@@ -446,8 +454,8 @@ public class LoginManager<Profile> where Profile: Codable {
       throw err
     }
     guard
-      let decodedPassword = u.shadow.decrypt(_cipher, password: pwd, salt: u.salt),
-      decodedPassword == pwd
+      let shadow = try self.shadow(password, salt: u.salt),
+      shadow == u.shadow
       else {
         _log.report(id, level: .warning, event: .login,
                     message: "access denied")
@@ -480,11 +488,10 @@ public class LoginManager<Profile> where Profile: Codable {
                   message: "jwt verification failure")
       throw Exception.fault("jwt verification failure")
     }
-    let usr = id.stringByEncodingURL
     let u: U
     do {
       _lock.wait()
-      u = try _select(usr)
+      u = try _select(id)
       _lock.signal()
     } catch (let err) {
       _log.report(id, level: .warning, event: .verification, message: err.localizedDescription)
