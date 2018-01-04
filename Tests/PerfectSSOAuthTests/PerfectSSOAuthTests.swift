@@ -81,13 +81,13 @@ class PerfectSSOAuthTests: XCTestCase {
           autoreleasepool {
             try? manager.register(id: u, password: p, profile: prof)
             if let t = try? manager.login(id: u, password: p) {
-              _ = try? manager.verify(id: u, token: t, logout: true)
+              _ = try? manager.verify(token: t, logout: true)
             }
           }
         #else
           try? manager.register(id: u, password: p, profile: prof)
           if let t = try? manager.login(id: u, password: p) {
-            _ = try? manager.verify(id: u, token: t, logout: true)
+            _ = try? manager.verify(token: t, logout: true)
           }
         #endif
         g.leave()
@@ -122,12 +122,12 @@ class PerfectSSOAuthTests: XCTestCase {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       let token = try manager.login(id: username, password: godpass)
       print(token)
-      let x = try manager.verify(id: username, token: token)
+      let x = try manager.verify(token: token)
       print(x.header)
       print(x.content)
       let tok2 = try manager.renew(id: username)
       XCTAssertNotEqual(tok2, token)
-      let y = try manager.verify(id: username, token: tok2)
+      let y = try manager.verify(token: tok2)
       XCTAssertEqual(x.content["iss"] as? String ?? "X", y.content["iss"] as? String ?? "Y")
     } catch {
       XCTFail(error.localizedDescription)
@@ -143,18 +143,18 @@ class PerfectSSOAuthTests: XCTestCase {
       let manager = LoginManager<Profile>(udb: udb, log: log, recycle: 3)
       try manager.update(id: username, password: godpass)
       let token = try manager.login(id: username, password: godpass, timeout: 2)
-      let x = try manager.verify(id: username, token: token)
+      let x = try manager.verify(token: token)
       print(x.header)
       print(x.content)
       print("waiting for ticket expiration test")
       sleep(5)
-      let y = try? manager.verify(id: username, token: token)
+      let y = try? manager.verify(token: token)
       XCTAssertNil(y)
       let token2 = try manager.login(id: username, password: godpass)
-      let x2 = try manager.verify(id: username, token: token2, logout: true)
+      let x2 = try manager.verify(token: token2, logout: true)
       print(x2.header)
       print(x2.content)
-      let y2 = try? manager.verify(id: username, token: token2)
+      let y2 = try? manager.verify(token: token2)
       XCTAssertNil(y2)
     } catch {
       XCTFail(error.localizedDescription)
@@ -171,6 +171,7 @@ class PerfectSSOAuthTests: XCTestCase {
     } catch {
       XCTFail("user deleted")
     }
+    testLeak(udb: udb, label: label)
   }
 
   func testPostgreSQL() {
@@ -181,7 +182,6 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBPostgreSQL<Profile>(connection: pgconnection, sample: profile)
       testStandard(udb: udb, label: "postgresql")
-      testLeak(udb: udb, label: "postgresql")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -198,7 +198,6 @@ class PerfectSSOAuthTests: XCTestCase {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
        password: mysql_pwd, database: mysql_dbt, sample: profile)
       testStandard(udb: udb, label: "mariadb")
-      testLeak(udb: udb, label: "mariadb")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -215,7 +214,6 @@ class PerfectSSOAuthTests: XCTestCase {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
       password: mysql_pwd, database: mysql_dbt, sample: profile)
       testStandard(udb: udb, label: "mysql")
-      testLeak(udb: udb, label: "mysql")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -225,7 +223,6 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBSQLite<Profile>(path: sqlite, sample: profile)
       testStandard(udb: udb, label: "sqlite")
-      testLeak(udb: udb, label: "sqlite")
     } catch {
       XCTFail(error.localizedDescription)
     }
@@ -235,7 +232,6 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
       testStandard(udb: udb, label: "jsonfile")
-      testLeak(udb: udb, label: "jsonfile")
     } catch {
       XCTFail(error.localizedDescription)
     }

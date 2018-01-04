@@ -278,7 +278,7 @@ let token = try man.login(id: "someone", password: "secret", header: ["foo": "ba
 如果验证时设置 `allowSSO = true`，则当前登录管理器能够接受来自与当前管理器不同的其他令牌签发者的验证请求，否则 `verify` 会拒绝其他外来令牌，即使令牌是有效的。
 
 ``` swift
-let (header, content) = try man.verify(id: "someone", token: token_from_client, allowSSO: true)
+let (header, content) = try man.verify(token: token_from_client, allowSSO: true)
 
 guard let issuer = content["iss"] as? String {
   // 出错了！
@@ -394,7 +394,7 @@ public protocol RateLimiter {
   func onAttemptRegister(_ userId: String, password: String) throws
   func onAttemptLogin(_ userId: String, password: String) throws
   func onLogin<Profile>(_ record: UserRecord<Profile>) throws
-  func onAttemptToken(_ userID: String, token: String) throws
+  func onAttemptToken(token: String) throws
   func onRenewToken<Profile>(_ record: UserRecord<Profile>) throws
   func onUpdate<Profile>(_ record: UserRecord<Profile>) throws
   func onUpdate(_ userId: String, password: String) throws
