@@ -1,7 +1,7 @@
 import PackageDescription
 import Foundation
 
-var repos = ["Perfect-Crypto"]
+var repos = ["Perfect-HTTPServer"]
 var targets = [Target(name: "PerfectSSOAuth", dependencies: [])]
 let excludes: [String]
 let db: String

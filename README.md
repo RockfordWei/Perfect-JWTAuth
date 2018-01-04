@@ -284,7 +284,7 @@ It is especially useful when single sign-on is required: set the `allowSSO = tru
 Otherwise, `verify` will reject any foreign issuers, even the token itself is valid.
 
 ``` swift
-let (header, content) = try man.verify(id: "someone", token: token_from_client, allowSSO: true)
+let (header, content) = try man.verify(token: token_from_client, allowSSO: true)
 
 guard let issuer = content["iss"] as? String {
   // something wrong
@@ -402,7 +402,7 @@ public protocol RateLimiter {
   func onAttemptRegister(_ userId: String, password: String) throws
   func onAttemptLogin(_ userId: String, password: String) throws
   func onLogin<Profile>(_ record: UserRecord<Profile>) throws
-  func onAttemptToken(_ userID: String, token: String) throws
+  func onAttemptToken(token: String) throws
   func onRenewToken<Profile>(_ record: UserRecord<Profile>) throws
   func onUpdate<Profile>(_ record: UserRecord<Profile>) throws
   func onUpdate(_ userId: String, password: String) throws

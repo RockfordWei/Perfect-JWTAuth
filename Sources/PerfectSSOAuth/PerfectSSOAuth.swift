@@ -149,9 +149,8 @@ public protocol RateLimiter {
   func onLogin<Profile>(_ record: UserRecord<Profile>) throws
 
   /// an attempt on token verification, should throw errors if overrated.
-  /// - parameter userId: the user id used to attampt verification
   /// - parameter token: the token used to attampt verification
-  func onAttemptToken(_ userID: String, token: String) throws
+  func onAttemptToken(token: String) throws
 
   /// a token renew event, should throw errors if overrated.
   /// - parameter record: the user record to renew token
@@ -175,7 +174,7 @@ public final class Unlimitated<Profile> : RateLimiter {
   public func onAttemptRegister(_ userId: String, password: String) throws {}
   public func onAttemptLogin(_ userId: String, password: String) throws { }
   public func onLogin<Profile>(_ record: UserRecord<Profile>) throws { }
-  public func onAttemptToken(_ userID: String, token: String) throws { }
+  public func onAttemptToken(token: String) throws { }
   public func onRenewToken<Profile>(_ record: UserRecord<Profile>) throws { }
   public func onUpdate<Profile>(_ record: UserRecord<Profile>) throws { }
   public func onUpdate(_ userId: String, password: String) throws { }
@@ -253,6 +252,17 @@ public class LoginManager<Profile> where Profile: Codable {
 
   internal let _lock: DispatchSemaphore
 
+  /// encrypt the password into a "shadow" string by the salt.
+  /// The workflow is:
+  /// 1. generate a SHA 384 digest from the salt
+  /// 2. get the first 32 bytes of the digest as the key of encryption
+  /// 3. get the following 16 bytes of the digest as the vector of encryption
+  /// 4. use these key and vector to encrypt the password into a "shadow"
+  /// 5. save the shadow into a base64 string
+  /// - parameter password: the password to storage
+  /// - parameter salt: a random string to encrypt, should be saved together
+  /// - returns: a base64 string, if success
+  /// - throws: Exception.
   fileprivate func shadow(_ password: String, salt: String) throws -> String? {
     guard let hashData = salt.digest(.sha384) else {
       throw Exception.fault("digest(sha384)")
@@ -468,23 +478,22 @@ public class LoginManager<Profile> where Profile: Codable {
   /// use this function to verify the token he/she presents.
   /// Would log a verification event on an avaiable log filer.
   /// - parameters:
-  ///   - id: the user id
   ///   - token: the JWT token that the user is presenting.
   ///   - allowSSO: allow an incoming foreign token, i.e, the token is not issue by this login manager.
   ///   - logout: log off the current token bearer. **NOTE** this operation can only perform on local issued tickets.
   /// - returns: a tuple of header & content info encoded in the token.
   /// - throws: Exception.
-  public func verify(id: String, token: String, allowSSO: Bool = true, logout: Bool = false) throws ->
+  public func verify(token: String, allowSSO: Bool = true, logout: Bool = false) throws ->
     (header: [String: Any], content: [String: Any]) {
     do {
-      try _pass.goodEnough(userId: id)
-      try _rate.onAttemptToken(id, token: token)
+      try _rate.onAttemptToken(token: token)
     } catch (let err) {
-      _log.report(id, level: .warning, event: .verification, message: err.localizedDescription)
+      _log.report("unknown", level: .warning, event: .verification, message: err.localizedDescription)
       throw err
     }
-    guard let jwt = JWTVerifier(token) else {
-      _log.report(id, level: .warning, event: .verification,
+    guard let jwt = JWTVerifier(token),
+      let id = jwt.payload["aud"] as? String else {
+      _log.report("unknown", level: .warning, event: .verification,
                   message: "jwt verification failure")
       throw Exception.fault("jwt verification failure")
     }
@@ -513,9 +522,7 @@ public class LoginManager<Profile> where Profile: Codable {
         throw Exception.fault("invalid issuer")
       }
     }
-    guard let aud = jwt.payload["aud"] as? String,
-      aud == id,
-      let timeout = jwt.payload["exp"] as? Int,
+    guard let timeout = jwt.payload["exp"] as? Int,
       now <= timeout,
       let nbf = jwt.payload["nbf"] as? Int,
       nbf <= now,
