@@ -354,7 +354,7 @@ try man.drop(id: username)
 /// a generic Login Manager
 public class LoginManager<Profile> where Profile: Codable {
 
-  public init(cipher: Cipher = .aes_256_cbc, keyIterations: Int = 1024,
+  public init(cipher: Cipher = .aes_128_cbc, keyIterations: Int = 1024,
   digest: Digest = .md5, saltLength: Int = 16, alg: JWT.Alg = .hs256,
   udb: UserDatabase,
   log: LogManager? = nil,
