@@ -310,7 +310,7 @@ let renewedToken = try man.renew(id: "someone", headers: ["foo":"bar", "fou": "p
 登录管理器还提供一个可选参数用于注销之前签发的令牌。
 
 ``` swift
-let (header, content) = try man.verify(id: username, token: token, logout: true)
+let (header, content) = try man.verify(token: token, logout: true)
 
 // 如果执行无误，则变量 header 和 content 内容虽然正常，
 // 但是令牌会失效。

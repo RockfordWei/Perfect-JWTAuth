@@ -318,7 +318,7 @@ let renewedToken = try man.renew(id: "someone", headers: ["foo":"bar", "fou": "p
 Login manager also provides an optional parameter inside of the `verify` function interface to cancel a previously issued token:
 
 ``` swift
-let (header, content) = try man.verify(id: username, token: token, logout: true)
+let (header, content) = try man.verify(token: token, logout: true)
 
 // if success, both header and content value is still be readable,
 // but the token is no longer valid.
