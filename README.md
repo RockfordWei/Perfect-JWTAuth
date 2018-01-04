@@ -1,4 +1,4 @@
-# Perfect Single Sign-On Authentication Module
+# Perfect Single Sign-On Authentication Module [简体中文](README.zh_CN.md)
 
 
 <p align="center">
@@ -54,11 +54,29 @@ Besides the teamwork of PerfectlySoft Inc., many improvements  and features of t
 
 ## Objectives
 
-- independently work without ORMs (although it includes a mini ORM actually) or even databases, while it will supports most Perfect database drivers soon.
-- extremely fast, light-weighted, simple, configurable, securied, scalable and thread-safe.
+- Independently work without ORMs (although it includes a mini ORM actually) or even databases, while it will supports most Perfect database drivers soon.
+- Fast, light-weighted, simple, configurable, secured, scalable and thread-safe.
 - Session free: a full application of JWT for the single sign-on authentication to any virtual private clouds.
 
+## Why SSO?
 
+Feature|SSO|LocalAuth|Turnstile
+------|----|---------|---------
+Security Method|AES|Digest|BlowFish
+Password Security Level|Highest|Low|High
+Password Shadow Generation|Fast|Fast|Very Slow
+Package Layout|One Piece|Scattered|Scattered
+Build Configurable|Yes|N/A|N/A
+Login Control|JWT|Session|Session
+Single Sign-On|Yes|N/A|N/A
+Token Renew|Yes|N/A|N/A
+Password Quality Control|Protocol|N/A|N/A
+Rate Limiter|Protocol|N/A|N/A
+Thread Safe|Yes|N/A|N/A
+Database Free/Persistence|Yes|N/A|N/A
+Log Readability|JSON Friendly|Plain Text|Plain Text
+User Profile Extension|Generic/Strong Typed|Dictionary|Dictionary
+Database Customization|Protocol|StORM based|StORM based
 
 ## SPM Configuration Note
 
