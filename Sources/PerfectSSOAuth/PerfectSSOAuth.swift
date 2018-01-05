@@ -165,6 +165,7 @@ public protocol RateLimiter {
   func onDeletion(_ userId: String) throws
 }
 
+/// a placeholder of RateLimiter protocol - just doing nothing
 public final class Unlimitated<Profile> : RateLimiter {
   public func onAttemptRegister(_ userId: String, password: String) throws {}
   public func onAttemptLogin(_ userId: String, password: String) throws { }
