@@ -82,7 +82,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     db.close()
   }
 
-  public func issue(_ ticket: String, _ expiration: time_t) throws {
+  public func ban(_ ticket: String, _ expiration: time_t) throws {
     guard expiration > time(nil) else {
       throw Exception.fault("ticket has already expired")
     }
@@ -98,20 +98,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     }
   }
 
-  public func cancel(_ ticket: String) throws {
-    self.autoflush()
-
-    let sql = "DELETE FROM tickets WHERE id = $1"
-    let result = db.exec(statement: sql, params: [ticket])
-    let s = result.status()
-    let r = result.errorMessage()
-    result.clear()
-    guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.fault(r)
-    }
-  }
-
-  public func isValid(_ ticket: String) -> Bool {
+  public func isRejected(_ ticket: String) -> Bool {
     self.autoflush()
 
     let sql = "SELECT id FROM tickets WHERE id = $1 LIMIT 1"

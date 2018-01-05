@@ -324,7 +324,7 @@ let (header, content) = try man.verify(token: token, logout: true)
 // but the token is no longer valid.
 ```
 
-**NOTE** It is not possible to logout a foreign token.
+**NOTE** JWT is not supposed to logout in RFC7519, however, Perfect-SSO is using a "blacklist" to ban those "logoff" tickets, which is practical and could be propagated to all sites by sharing the "blacklist" (in database, the "tickets" table).
 
 #### Load User Profile 
 
@@ -438,7 +438,7 @@ public protocol LoginQualityControl {
 
 ### Token Recycler
 
-`LoginManager` can cancel any previously issued tokens. You can customize the token recycling time span by set the `recycle` parameter, in seconds, and 60 by default.
+`LoginManager` can cancel any previously rejected tickets. You can customize the token recycling time span by set the `recycle` parameter, in seconds, and 60 by default.
 
 **NOTE** a smaller recycling timeout may result in a bigger system usage.
 
@@ -464,14 +464,11 @@ public protocol UserDatabase {
   func delete(_ id: String) throws
   
   /// -------------------- JWT TOKEN MANAGEMENT SYSTEM --------------------
-  /// insert a new ticket with its expiration setting to the database
-  func issue(_ ticket: String, _ expiration: time_t) throws
+  /// put a ticket with its expiration to the blacklist
+  func ban(_ ticket: String, _ expiration: time_t) throws
 
-  /// invalidate a ticket
-  func cancel(_ ticket: String) throws
-
-  /// test if the giving ticket is valid
-  func isValid(_ ticket: String) -> Bool
+  /// test if the giving ticket has been banned.
+  func isRejected(_ ticket: String) -> Bool
 }
 
 ```

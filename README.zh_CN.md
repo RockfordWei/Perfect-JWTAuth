@@ -316,7 +316,7 @@ let (header, content) = try man.verify(token: token, logout: true)
 // 但是令牌会失效。
 ```
 
-**注意** 在单点登录环境下，是无法注销外单位签发的令牌的。
+**注意** RFC7519 标准中 JWT 是无法注销的，但是 Perfect-SSO 使用了黑名单方法来实现“注销”功能。而且只要数据库之间能够同步这个tickets表，就可以共享黑名单。
 
 #### 获取用户档案
 
@@ -456,14 +456,11 @@ public protocol UserDatabase {
   func delete(_ id: String) throws
   
   /// -------------------- JWT 令牌管理 --------------------
-  /// 签发新凭证（保存到数据库）
-  func issue(_ ticket: String, _ expiration: time_t) throws
+  /// 作废当前票据，进入黑名单
+  func ban(_ ticket: String, _ expiration: time_t) throws
 
-  /// 注销凭证
-  func cancel(_ ticket: String) throws
-
-  /// 查看凭证是否有效
-  func isValid(_ ticket: String) -> Bool
+  /// 查看凭证是否在黑名单范围内
+  func isRejected(_ ticket: String) -> Bool
 }
 
 ```

@@ -74,7 +74,7 @@ public class UDBSQLite<Profile>: UserDatabase {
     db.close()
   }
 
-  public func issue(_ ticket: String, _ expiration: time_t) throws {
+  public func ban(_ ticket: String, _ expiration: time_t) throws {
     guard expiration > time(nil) else {
       throw Exception.fault("ticket has already expired")
     }
@@ -87,16 +87,7 @@ public class UDBSQLite<Profile>: UserDatabase {
     }
   }
 
-  public func cancel(_ ticket: String) throws {
-    self.autoflush()
-
-    try db.execute(statement: "DELETE FROM tickets WHERE id = ?") {
-      stmt in
-      try stmt.bind(position: 1, ticket)
-    }
-  }
-
-  public func isValid(_ ticket: String) -> Bool {
+  public func isRejected(_ ticket: String) -> Bool {
     self.autoflush()
 
     var count = 0

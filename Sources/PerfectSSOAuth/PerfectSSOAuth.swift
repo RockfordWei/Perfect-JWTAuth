@@ -115,20 +115,15 @@ public protocol UserDatabase {
   /// - throws: Exception
   func delete(_ id: String) throws
 
-  /// insert a new ticket with its expiration setting to the database
-  /// - parameter ticket: the ticket to save
+  /// put a ticket into the blacklist
+  /// - parameter ticket: the ticket to cancel
   /// - parameter expiration: the expiration end in timestamp
   /// - throws: Exception
-  func issue(_ ticket: String, _ expiration: time_t) throws
+  func ban(_ ticket: String, _ expiration: time_t) throws
 
-  /// invalidate a ticket
-  /// - parameter ticket: the ticket to cancel
-  /// - throws: Exception
-  func cancel(_ ticket: String) throws
-
-  /// test if the giving ticket is valid
+  /// test if the giving ticket is in the blacklist
   /// - parameter ticket: the ticket to check
-  func isValid(_ ticket: String) -> Bool
+  func isRejected(_ ticket: String) -> Bool
 }
 
 /// a protocol that monitors unusual user behaviours, such as excessive access, etc.
@@ -244,9 +239,8 @@ public class LoginManager<Profile> where Profile: Codable {
   internal let _select: (_ id: String) throws -> U
   internal let _update: (_ record: U) throws -> Void
   internal let _delete: (_ id: String) throws -> Void
-  internal let _issue: (_ ticket: String, _ expiration: time_t) throws -> Void
-  internal let _cancel: (_ ticket: String) throws -> Void
-  internal let _isValid: (_ ticket: String) -> Bool
+  internal let _ban: (_ ticket: String, _ expiration: time_t) throws -> Void
+  internal let _isRejected: (_ ticket: String) -> Bool
   /// every instance of LoginManager has a unique manager id, in form of uuid
   public var globalId: String { return _managerID }
 
@@ -313,9 +307,8 @@ public class LoginManager<Profile> where Profile: Codable {
     _select = udb.select
     _update = udb.update
     _delete = udb.delete
-    _issue = udb.issue
-    _cancel = udb.cancel
-    _isValid = udb.isValid
+    _ban = udb.ban
+    _isRejected = udb.isRejected
     if let limiter = rate {
       _rate = limiter
     } else {
@@ -438,11 +431,11 @@ public class LoginManager<Profile> where Profile: Codable {
   ///   - id: the user id, will be automatically encoded by URL constraints
   ///   - password: the user password, will be automatically encoded by URL constraints
   ///   - subject: optional, subject to issue a jwt token, empty by default
-  ///   - timeout: optional, jwt token valid period, in seconds. 3600 by default (one hour)
+  ///   - timeout: optional, jwt token valid period, in seconds. 600 by default (10 min)
   ///   - headers: optional, extra headers to issue, empty by default.
   /// - returns: a valid jwt token
   public func login(id: String, password: String,
-                     subject: String = "", timeout: Int = 3600,
+                     subject: String = "", timeout: Int = 600,
                      headers: [String:Any] = [:]) throws -> String {
     do {
       try _pass.goodEnough(userId: id)
@@ -480,7 +473,7 @@ public class LoginManager<Profile> where Profile: Codable {
   /// - parameters:
   ///   - token: the JWT token that the user is presenting.
   ///   - allowSSO: allow an incoming foreign token, i.e, the token is not issue by this login manager.
-  ///   - logout: log off the current token bearer. **NOTE** this operation can only perform on local issued tickets.
+  ///   - logout: log off the current token bearer.
   /// - returns: a tuple of header & content info encoded in the token.
   /// - throws: Exception.
   public func verify(token: String, allowSSO: Bool = true, logout: Bool = false) throws ->
@@ -533,40 +526,32 @@ public class LoginManager<Profile> where Profile: Codable {
         throw Exception.fault("token failure")
     }
 
-    var needlog = true
-    if iss == _managerID {
-      if logout {
-        do {
-          _lock.wait()
-          try _cancel(ticket)
-          _lock.signal()
-          _log.report(id, level: .event, event: .logoff, message: nil )
-        } catch (let err) {
-          _log.report(id, level: .warning, event: .logoff,
-                      message: "log out failure:" + err.localizedDescription )
-          _lock.signal()
-        }
-        needlog = false
-      } else {
-        _lock.wait()
-        let valid = _isValid(ticket)
-        _lock.signal()
-        guard valid else {
-          _log.report(id, level: .warning, event: .verification,
-                      message: "jwt valid but ticket is either expired or cancelled")
-          throw Exception.fault("invalid ticket")
-        }
-      }
+    _lock.wait()
+    let rejected = _isRejected(ticket)
+    _lock.signal()
+
+    if rejected {
+      _log.report(id, level: .warning, event: .verification, message: "rejected")
+      throw Exception.fault("rejected")
     }
 
-    if needlog {
-      _log.report(id, level: .event, event: .verification, message: "token verified")
+    if logout {
+      do {
+        _lock.wait()
+        try _ban(ticket, timeout)
+        _lock.signal()
+      } catch (let err) {
+        _log.report(id, level: .warning, event: .logoff,
+                    message: "log out failure:" + err.localizedDescription )
+        _lock.signal()
+        throw err
+      }
     }
     return (header: jwt.header, content: jwt.payload)
   }
 
   internal func renew(u: U,
-                      subject: String = "", timeout: Int = 3600,
+                      subject: String = "", timeout: Int = 600,
                       headers: [String:Any] = [:]) throws -> String {
     let now = time(nil)
     let expiration = now + timeout
@@ -575,10 +560,6 @@ public class LoginManager<Profile> where Profile: Codable {
       "iss":_managerID, "sub": subject, "aud": u.id,
       "exp": expiration, "nbf": now, "iat": now, "jit": ticket
     ]
-
-    _lock.wait()
-    try _issue(ticket, expiration)
-    _lock.signal()
 
     guard let jwt = JWTCreator(payload: claims) else {
       _log.report(u.id, level: .critical, event: .login,
@@ -603,12 +584,12 @@ public class LoginManager<Profile> where Profile: Codable {
   /// - parameters:
   ///   - id: the user id
   ///   - subject: optional, subject to issue a jwt token, empty by default
-  ///   - timeout: optional, jwt token valid period, in seconds. 3600 by default (one hour)
+  ///   - timeout: optional, jwt token valid period, in seconds. 600 by default (10 min)
   ///   - headers: optional, extra headers to issue, empty by default.
   /// - throws: Exception
   /// - returns: a valid jwt token
   public func renew(id: String,
-                    subject: String = "", timeout: Int = 3600,
+                    subject: String = "", timeout: Int = 600,
                     headers: [String:Any] = [:]) throws -> String {
     do {
       try _pass.goodEnough(userId: id)

@@ -91,7 +91,7 @@ public class UDBMySQL<Profile>: UserDatabase {
     db.close()
   }
 
-  public func issue(_ ticket: String, _ expiration: time_t) throws {
+  public func ban(_ ticket: String, _ expiration: time_t) throws {
     guard expiration > time(nil) else {
       throw Exception.fault("ticket has already expired")
     }
@@ -111,23 +111,7 @@ public class UDBMySQL<Profile>: UserDatabase {
     }
   }
 
-  public func cancel(_ ticket: String) throws {
-    self.autoflush()
-
-    let sql = "DELETE FROM tickets WHERE id = ?"
-    let stmt = MySQLStmt(db)
-    defer { stmt.close() }
-    guard stmt.prepare(statement: sql)
-      else {
-        throw Exception.fault(db.errorMessage())
-    }
-    stmt.bindParam(ticket)
-    guard stmt.execute() else {
-      throw Exception.fault(db.errorMessage())
-    }
-  }
-
-  public func isValid(_ ticket: String) -> Bool {
+  public func isRejected(_ ticket: String) -> Bool {
     self.autoflush()
 
     let stmt = MySQLStmt(db)

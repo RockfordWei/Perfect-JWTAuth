@@ -29,7 +29,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
     }
   }
 
-  public func issue(_ ticket: String, _ expiration: time_t) throws {
+  public func ban(_ ticket: String, _ expiration: time_t) throws {
     guard expiration > time(nil) else {
       throw Exception.fault("ticket has already expired")
     }
@@ -45,22 +45,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
     ticketsReversed[expiration] = set
   }
 
-  public func cancel(_ ticket: String) throws {
-    self.autoflush()
-    guard let timekey = tickets[ticket],
-      var set = ticketsReversed[timekey] else {
-        throw Exception.fault("ticket not found")
-    }
-    _ = set.remove(ticket)
-    if set.isEmpty {
-      _ = ticketsReversed.removeValue(forKey: timekey)
-    } else {
-      ticketsReversed[timekey] = set
-    }
-    _ = tickets.removeValue(forKey: ticket)
-  }
-
-  public func isValid(_ ticket: String) -> Bool {
+  public func isRejected(_ ticket: String) -> Bool {
     self.autoflush()
     if let _ = tickets[ticket] {
       return true
