@@ -18,8 +18,8 @@ extension MySQLStmt {
     } else if x is [Int8], let y = x as? [Int8] {
       self.bindParam(y, length: y.count)
     } else {
-      let tp = type(of: x)
-      throw Exception.fault("incompatible type: \(tp)")
+      //let tp = type(of: x)
+      throw Exception.unsupported
     }
   }
 }
@@ -38,7 +38,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
       touch = now
     }
   }
-  
+
   public init<Profile: Codable>
     (host: String, user: String, password: String,
      database: String, sample: Profile) throws {
@@ -49,15 +49,15 @@ public class UDBMariaDB<Profile>: UserDatabase {
 
     guard db.setOption(.MYSQL_SET_CHARSET_NAME, "utf8mb4"),
       db.connect(host: host, user: user, password: password, db: database) else {
-        throw Exception.fault("connection failure")
+        throw Exception.connection
     }
     let properties = try DataworkUtility.explainProperties(of: sample)
     guard !properties.isEmpty else {
-      throw Exception.fault("invalid profile structure")
+      throw Exception.malformed
     }
     fields = try properties.map { s -> Field in
       guard let tp = DataworkUtility.ANSITypeOf(s.type) else {
-        throw Exception.fault("incompatible type name: \(s.type)")
+        throw Exception.unsupported
       }
       return Field(name: s.name, type: tp)
     }
@@ -69,7 +69,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     salt VARCHAR(256), shadow VARCHAR(1024), \(fieldDescription))
     """
     guard db.query(statement: sql) else {
-      throw Exception.fault("table creation failure")
+      throw Exception.operation
     }
     let sql2 = """
     CREATE TABLE IF NOT EXISTS tickets (
@@ -77,13 +77,13 @@ public class UDBMariaDB<Profile>: UserDatabase {
     expiration INTEGER)
     """
     guard db.query(statement: sql2) else {
-      throw Exception.fault("tickets table creation failure")
+      throw Exception.operation
     }
     let sql3 = """
     CREATE INDEX IF NOT EXISTS ticket_exp ON tickets( expiration)
     """
     guard db.query(statement: sql3) else {
-      throw Exception.fault("tickets index creation failure")
+      throw Exception.operation
     }
   }
 
@@ -93,7 +93,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
 
   public func ban(_ ticket: String, _ expiration: time_t) throws {
     guard expiration > time(nil) else {
-      throw Exception.fault("ticket has already expired")
+      throw Exception.expired
     }
     self.autoflush()
 
@@ -102,12 +102,12 @@ public class UDBMariaDB<Profile>: UserDatabase {
     defer { stmt.close() }
     guard stmt.prepare(statement: sql)
       else {
-        throw Exception.fault(db.errorMessage())
+        throw Exception.operation
     }
     stmt.bindParam(ticket)
     stmt.bindParam(expiration)
     guard stmt.execute() else {
-      throw Exception.fault(db.errorMessage())
+      throw Exception.operation
     }
   }
 
@@ -159,13 +159,13 @@ public class UDBMariaDB<Profile>: UserDatabase {
 
   public func insert<Profile>(_ record: UserRecord<Profile>) throws {
     if exists(record.id) {
-      throw Exception.fault("user has already registered")
+      throw Exception.violation
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       let dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.fault("json encoding failure")
+        throw Exception.json
     }
     let properties:[String] = fields.map { $0.name }
     let columns = ["id", "salt", "shadow"] + properties
@@ -177,7 +177,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     defer { stmt.close() }
     guard stmt.prepare(statement: sql)
       else {
-        throw Exception.fault(db.errorMessage())
+        throw Exception.operation
     }
     stmt.bindParam(record.id)
     stmt.bindParam(record.salt)
@@ -187,19 +187,19 @@ public class UDBMariaDB<Profile>: UserDatabase {
       try stmt.bindParameter(x)
     }
     guard stmt.execute() else {
-      throw Exception.fault(db.errorMessage())
+      throw Exception.operation
     }
   }
 
   public func update<Profile>(_ record: UserRecord<Profile>) throws {
     guard exists(record.id) else {
-      throw Exception.fault("user does not exists")
+      throw Exception.inexisting
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       let dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.fault("json encoding failure")
+        throw Exception.json
     }
     let properties:[String] = fields.map { $0.name }
     let columns:[String] = fields.map { "\($0.name) = ?" }
@@ -208,7 +208,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     let stmt = MySQLStmt(db)
     defer { stmt.close() }
     guard stmt.prepare(statement: sql) else {
-      throw Exception.fault(db.errorMessage())
+      throw Exception.operation
     }
     stmt.bindParam(record.salt)
     stmt.bindParam(record.shadow)
@@ -218,7 +218,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     }
     stmt.bindParam(record.id)
     guard stmt.execute() else {
-      throw Exception.fault(db.errorMessage())
+      throw Exception.operation
     }
   }
 
@@ -231,10 +231,10 @@ public class UDBMariaDB<Profile>: UserDatabase {
     defer { stmt.close() }
     guard stmt.prepare(statement: sql)
       else {
-        throw Exception.fault(self.db.errorMessage())
+        throw Exception.operation
     }
     stmt.bindParam(id)
-    guard stmt.execute() else { throw Exception.fault(self.db.errorMessage())}
+    guard stmt.execute() else { throw Exception.operation }
     let fetched = stmt.results().forEachRow { rec in
       let _id = rec[0] as? String
       let _salt = rec[1] as? String
@@ -260,24 +260,24 @@ public class UDBMariaDB<Profile>: UserDatabase {
         debugPrint("json failure")
       }
     }
-    guard fetched, let v = u else { throw Exception.fault(self.db.errorMessage())}
+    guard fetched, let v = u else { throw Exception.operation }
     return v
   }
 
   public func delete(_ id: String) throws {
     guard exists(id) else {
-      throw Exception.fault("user does not exist")
+      throw Exception.inexisting
     }
     let stmt = MySQLStmt(db)
     defer { stmt.close() }
     let sql = "DELETE FROM users WHERE id = ?"
     guard stmt.prepare(statement: sql)
       else {
-        throw Exception.fault(db.errorMessage())
+        throw Exception.operation
     }
     stmt.bindParam(id)
     guard stmt.execute() else {
-      throw Exception.fault(db.errorMessage())
+      throw Exception.operation
     }
   }
 }

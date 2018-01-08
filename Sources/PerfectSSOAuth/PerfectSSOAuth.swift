@@ -1,5 +1,7 @@
 import PerfectLib
 import PerfectCrypto
+import PerfectHTTP
+import PerfectHTTPServer
 import Foundation
 import Dispatch
 
@@ -202,12 +204,12 @@ public final class HumblestLoginControl: LoginQualityControl {
   }
   public func goodEnough(userId: String) throws {
     guard userId.count.inRange(of: size) else {
-      throw Exception.fault("invalid username")
+      throw Exception.username
     }
   }
   public func goodEnough(password: String) throws {
     guard password.count.inRange(of: size) else {
-      throw Exception.fault("invalid password")
+      throw Exception.password
     }
   }
 }
@@ -260,7 +262,7 @@ public class LoginManager<Profile> where Profile: Codable {
   /// - throws: Exception.
   fileprivate func shadow(_ password: String, salt: String) throws -> String? {
     guard let hashData = salt.digest(.sha384) else {
-      throw Exception.fault("digest(sha384)")
+      throw Exception.digestion
     }
     let hashKeyData:[UInt8] = hashData[0..<32].map {$0}
     let ivData:[UInt8] = hashData[32..<48].map {$0}
@@ -268,7 +270,7 @@ public class LoginManager<Profile> where Profile: Codable {
     guard let x = data.encrypt(self._cipher, key: hashKeyData, iv: ivData),
       let y = x.encode(.base64)
       else {
-        throw Exception.fault("aes(128)+base64")
+        throw Exception.encryption
     }
     return String(validatingUTF8: y)
   }
@@ -335,9 +337,9 @@ public class LoginManager<Profile> where Profile: Codable {
       try _rate.onAttemptRegister(id, password: password)
       try _pass.goodEnough(userId: id)
       try _pass.goodEnough(password: password)
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .registration, message: err.localizedDescription)
-      throw err
+    } catch {
+      _log.report(id, level: .warning, event: .registration, message: error.localizedDescription)
+      throw error
     }
     guard let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
@@ -345,17 +347,17 @@ public class LoginManager<Profile> where Profile: Codable {
       else {
         _log.report(id, level: .critical, event: .registration,
                     message: "unable to register '\(id)'/'\(password)' because of encryption failure")
-        throw Exception.fault("crypto failure")
+        throw Exception.encryption
     }
     let u = UserRecord<Profile>(id: id, salt: salt, shadow: shadow, profile: profile)
     _lock.wait()
     do {
       try _insert(u)
       _lock.signal()
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .registration, message: err.localizedDescription)
+    } catch {
+      _log.report(id, level: .warning, event: .registration, message: error.localizedDescription)
       _lock.signal()
-      throw err
+      throw error
     }
     _log.report(id, level: .event, event: .registration, message: "user registered")
   }
@@ -370,9 +372,9 @@ public class LoginManager<Profile> where Profile: Codable {
       try _rate.onUpdate(id, password: password)
       try _pass.goodEnough(userId: id)
       try _pass.goodEnough(password: password)
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
-      throw err
+    } catch {
+      _log.report(id, level: .warning, event: .updating, message: error.localizedDescription)
+      throw error
     }
     guard let random = ([UInt8](randomCount: _saltLength)).encode(.hex),
       let salt = String(validatingUTF8: random),
@@ -380,7 +382,7 @@ public class LoginManager<Profile> where Profile: Codable {
       else {
         _log.report("unknown", level: .warning, event: .updating,
                     message: "invalid update attempt '\(id)'/'\(password)'")
-        throw Exception.fault("crypto failure")
+        throw Exception.encryption
     }
     do {
       _lock.wait()
@@ -389,10 +391,10 @@ public class LoginManager<Profile> where Profile: Codable {
       u.shadow = shadow
       try self._update(u)
       _lock.signal()
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
+    } catch {
+      _log.report(id, level: .warning, event: .updating, message: error.localizedDescription)
       _lock.signal()
-      throw err
+      throw error
     }
     _log.report(id, level: .event, event: .updating, message: "password updated")
   }
@@ -405,9 +407,9 @@ public class LoginManager<Profile> where Profile: Codable {
   public func update(id: String, profile: Profile) throws {
     do {
       try _pass.goodEnough(userId: id)
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
-      throw err
+    } catch {
+      _log.report(id, level: .warning, event: .updating, message: error.localizedDescription)
+      throw error
     }
     do {
       _lock.wait()
@@ -418,10 +420,10 @@ public class LoginManager<Profile> where Profile: Codable {
       _lock.wait()
       try self._update(u)
       _lock.signal()
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .updating, message: err.localizedDescription)
+    } catch {
+      _log.report(id, level: .warning, event: .updating, message: error.localizedDescription)
       _lock.signal()
-      throw err
+      throw error
     }
     _log.report(id, level: .event, event: .updating, message: "profile updated")
   }
@@ -442,9 +444,9 @@ public class LoginManager<Profile> where Profile: Codable {
       try _pass.goodEnough(userId: id)
       try _pass.goodEnough(password: password)
       try _rate.onAttemptLogin(id, password: password)
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .login, message: err.localizedDescription)
-      throw err
+    } catch {
+      _log.report(id, level: .warning, event: .login, message: error.localizedDescription)
+      throw error
     }
     let u: U
     do {
@@ -452,10 +454,10 @@ public class LoginManager<Profile> where Profile: Codable {
       u = try _select(id)
       _lock.signal()
       try _rate.onLogin(u)
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .login, message: err.localizedDescription)
+    } catch {
+      _log.report(id, level: .warning, event: .login, message: error.localizedDescription)
       _lock.signal()
-      throw err
+      throw error
     }
     guard
       let shadow = try self.shadow(password, salt: u.salt),
@@ -463,7 +465,7 @@ public class LoginManager<Profile> where Profile: Codable {
       else {
         _log.report(id, level: .warning, event: .login,
                     message: "access denied")
-        throw Exception.fault("access denied")
+        throw Exception.access
     }
     return try self.renew(u: u, subject: subject, timeout: timeout, headers: headers)
   }
@@ -481,24 +483,24 @@ public class LoginManager<Profile> where Profile: Codable {
     (header: [String: Any], content: [String: Any]) {
     do {
       try _rate.onAttemptToken(token: token)
-    } catch (let err) {
-      _log.report("unknown", level: .warning, event: .verification, message: err.localizedDescription)
-      throw err
+    } catch {
+      _log.report("unknown", level: .warning, event: .verification, message: error.localizedDescription)
+      throw error
     }
     guard let jwt = JWTVerifier(token),
       let id = jwt.payload["aud"] as? String else {
       _log.report("unknown", level: .warning, event: .verification,
                   message: "jwt verification failure")
-      throw Exception.fault("jwt verification failure")
+      throw Exception.access
     }
     let u: U
     do {
       _lock.wait()
       u = try _select(id)
       _lock.signal()
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .verification, message: err.localizedDescription)
-      throw err
+    } catch {
+      _log.report(id, level: .warning, event: .verification, message: error.localizedDescription)
+      throw error
     }
     let now = time(nil)
     do {
@@ -506,14 +508,14 @@ public class LoginManager<Profile> where Profile: Codable {
     } catch {
       _log.report(id, level: .warning, event: .verification,
                   message: "jwt verification failure: \(token)")
-      throw Exception.fault("jwt verification failure")
+      throw Exception.access
     }
     guard let iss = jwt.payload["iss"] as? String else {
-      throw Exception.fault("issuer is null")
+      throw Exception.malformed
     }
     if iss != _managerID {
       guard allowSSO else {
-        throw Exception.fault("invalid issuer")
+        throw Exception.malformed
       }
     }
     guard let timeout = jwt.payload["exp"] as? Int,
@@ -524,7 +526,7 @@ public class LoginManager<Profile> where Profile: Codable {
       else {
         _log.report(id, level: .warning, event: .verification,
                     message: "jwt invalid payload: \(jwt.payload)")
-        throw Exception.fault("token failure")
+        throw Exception.malformed
     }
 
     _lock.wait()
@@ -533,7 +535,7 @@ public class LoginManager<Profile> where Profile: Codable {
 
     if rejected {
       _log.report(id, level: .warning, event: .verification, message: "rejected")
-      throw Exception.fault("rejected")
+      throw Exception.access
     }
 
     if logout {
@@ -541,11 +543,11 @@ public class LoginManager<Profile> where Profile: Codable {
         _lock.wait()
         try _ban(ticket, timeout)
         _lock.signal()
-      } catch (let err) {
+      } catch {
         _log.report(id, level: .warning, event: .logoff,
-                    message: "log out failure:" + err.localizedDescription )
+                    message: "log out failure:" + error.localizedDescription )
         _lock.signal()
-        throw err
+        throw error
       }
     }
     return (header: jwt.header, content: jwt.payload)
@@ -565,16 +567,16 @@ public class LoginManager<Profile> where Profile: Codable {
     guard let jwt = JWTCreator(payload: claims) else {
       _log.report(u.id, level: .critical, event: .login,
                   message: "token failure")
-      throw Exception.fault("token failure")
+      throw Exception.malformed
     }
 
     let ret: String
     do {
       ret = try jwt.sign(alg: _alg, key: u.salt, headers: headers)
-    } catch (let err) {
+    } catch {
       _log.report(u.id, level: .critical, event: .login,
-                  message: "jwt signature failure: \(err)")
-      throw err
+                  message: "jwt signature failure: \(error.localizedDescription)")
+      throw error
     }
     _log.report(u.id, level: .event, event: .login, message: "user logged")
     return ret
@@ -594,9 +596,9 @@ public class LoginManager<Profile> where Profile: Codable {
                     headers: [String:Any] = [:]) throws -> String {
     do {
       try _pass.goodEnough(userId: id)
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .renewal, message: err.localizedDescription)
-      throw err
+    } catch {
+      _log.report(id, level: .warning, event: .renewal, message: error.localizedDescription)
+      throw error
     }
     let u: U
     do {
@@ -604,9 +606,9 @@ public class LoginManager<Profile> where Profile: Codable {
       u = try _select(id)
       _lock.signal()
       try _rate.onRenewToken(u)
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .renewal, message: err.localizedDescription)
-      throw err
+    } catch {
+      _log.report(id, level: .warning, event: .renewal, message: error.localizedDescription)
+      throw error
     }
     return try self.renew(u: u, subject: subject, timeout: timeout, headers: headers)
   }
@@ -638,12 +640,205 @@ public class LoginManager<Profile> where Profile: Codable {
       try _delete(id)
       _lock.signal()
       _log.report(id, level: .event, event: .unregistration, message: "user closed")
-    } catch (let err) {
-      _log.report(id, level: .warning, event: .unregistration, message: err.localizedDescription)
+    } catch {
+      _log.report(id, level: .warning, event: .unregistration, message: error.localizedDescription)
       _lock.signal()
-      throw err
+      throw error
     }
   }
 }
 
 
+public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable {
+
+  public func filter(request: HTTPRequest, response: HTTPResponse,
+                     callback: (HTTPRequestFilterResult) -> ()) {
+
+    do {
+      switch request.uri {
+      case _config.reg:
+        let cookie = try self.register(request: request)
+        response.addCookie(cookie)
+        break
+      case _config.login:
+        let cookie = try self.login(request: request)
+        response.addCookie(cookie)
+        break
+      case _config.logout:
+        try self.logout(request: request)
+        break
+      case _config.modpass:
+        try self.modpass(request: request)
+        break
+      case _config.update:
+        try self.update(request: request)
+        break
+      case _config.drop:
+        try self.drop(request: request)
+        break
+      default:
+        let (id, profile) = try self.access(request: request)
+        response.request.scratchPad["id"] = id
+        response.request.scratchPad["profile"] = profile
+        callback(.continue(request, response))
+        return
+      }
+      response.setHeader(.contentType, value: "text/json")
+      response.setBody(string: "{\"error\":\"\"}")
+      response.completed()
+      callback(.execute(request, response))
+    } catch {
+      response.setHeader(.contentType, value: "text/json")
+      response.setBody(string: "{\"error\":\"\(error.localizedDescription)\"}")
+      response.completed()
+      callback(.halt(request, response))
+    }
+  }
+
+  public struct Configuration: Codable {
+
+    /// URIs / routes
+    public var reg = "/api/reg"
+    public var login = "/api/login"
+    public var logout = "/api/logout"
+    public var update = "/api/update"
+    public var modpass = "/api/modpass"
+    public var drop = "/api/drop"
+
+    /// variables
+    public var id = "id"
+    public var password = "password"
+    public var profile = "profile"
+    public var jwt = "jwt"
+    public var aud = "aud"
+  }
+
+  let _man: LoginManager<Profile>
+  let _config: Configuration
+  let _encoder: JSONEncoder
+  let _decoder: JSONDecoder
+
+  public init(_ manager: LoginManager<Profile>, configuration: Configuration) {
+    _man = manager
+    _config = configuration
+    _encoder = JSONEncoder()
+    _decoder = JSONDecoder()
+  }
+
+  internal func profile(of: String) throws -> Profile {
+    let bytes: [UInt8] = of.utf8.map { $0 }
+    let data = Data.init(bytes: bytes)
+    return try _decoder.decode(Profile.self, from: data)
+  }
+
+  public func register(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
+    guard
+      request.uri == _config.reg,
+      let id = request.param(name: _config.id),
+      let password = request.param(name: _config.password),
+      let json = request.param(name: _config.profile)
+      else {
+        throw Exception.request
+    }
+    try _man.register(id: id, password: password, profile: try profile(of: json))
+    return try login(id: id, password: password)
+  }
+
+  public func login(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
+    guard request.uri == _config.login,
+      let id = request.param(name: _config.id),
+      let password = request.param(name: _config.password)
+      else {
+        throw Exception.request
+    }
+    return try login(id: id, password: password)
+  }
+
+  internal func login(id: String, password: String) throws -> PerfectHTTP.HTTPCookie {
+    let token = try _man.login(id: id, password: password)
+    return HTTPCookie(
+      name: _config.jwt,
+      value: token,
+      domain: "",
+      expires: .relativeSeconds(600),
+      path: "/",
+      secure: false,
+      httpOnly: true,
+      sameSite: .strict
+    )
+  }
+
+  public func jwt(of: HTTPRequest) -> String? {
+    var token = ""
+    for (k, v) in of.cookies {
+      if k == _config.jwt {
+        token = v
+      }
+    }
+    if token.isEmpty { return nil }
+    return token
+  }
+
+  public func update(request: HTTPRequest) throws {
+    guard request.uri == _config.update,
+      let token = jwt(of: request),
+      let json = request.param(name: _config.profile)
+      else {
+        throw Exception.request
+    }
+    let (_, content) = try _man.verify(token: token)
+    guard let id = content[_config.aud] as? String else {
+      throw Exception.malformed
+    }
+    let p = try profile(of: json)
+    try _man.update(id: id, profile: p)
+  }
+
+  public func modpass(request: HTTPRequest) throws {
+    guard request.uri == _config.modpass,
+      let token = jwt(of: request),
+      let newpass = request.param(name: _config.password)
+      else {
+        throw Exception.request
+    }
+    let (_, content) = try _man.verify(token: token)
+    guard let id = content[_config.aud] as? String else {
+      throw Exception.malformed
+    }
+    try _man.update(id: id, password: newpass)
+  }
+
+  public func access(request: HTTPRequest) throws -> (String,Profile) {
+    guard let token = jwt(of: request)
+      else {
+        throw Exception.request
+    }
+    let (_, content) = try _man.verify(token: token)
+    guard let id = content[_config.aud] as? String else {
+      throw Exception.malformed
+    }
+    let p = try _man.load(id: id)
+    return (id, p)
+  }
+
+  public func logout(request: HTTPRequest) throws {
+    guard request.uri == _config.logout,
+      let token = jwt(of: request)
+      else {
+        throw Exception.request
+    }
+    _ = try _man.verify(token: token, logout: true)
+  }
+
+  public func drop(request: HTTPRequest) throws {
+    guard request.uri == _config.drop,
+      let token = jwt(of: request) else {
+        throw Exception.request
+    }
+    let (_, content) = try _man.verify(token: token)
+    guard let id = content[_config.aud] as? String else {
+      throw Exception.malformed
+    }
+    _ = try _man.drop(id: id)
+  }
+}

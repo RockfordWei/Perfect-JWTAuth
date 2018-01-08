@@ -31,7 +31,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
 
   public func ban(_ ticket: String, _ expiration: time_t) throws {
     guard expiration > time(nil) else {
-      throw Exception.fault("ticket has already expired")
+      throw Exception.expired
     }
     self.autoflush()
     tickets[ticket] = expiration
@@ -68,14 +68,14 @@ public class UDBJSONFile<Profile>: UserDatabase {
   public func insert<Profile>(_ record: UserRecord<Profile>) throws {
     let data = try encoder.encode(record)
     if 0 == access(path(of: record.id), 0) {
-      throw Exception.fault("record has already registered")
+      throw Exception.violation
     }
     try data.write(to: self.url(of: record.id))
   }
 
   public func select<Profile>(_ id: String) throws -> UserRecord<Profile> {
     guard 0 == access(path(of: id), 0) else {
-      throw Exception.fault("record does not exist")
+      throw Exception.inexisting
     }
     let data = try Data(contentsOf: url(of: id))
     return try decoder.decode(UserRecord.self, from: data)
@@ -84,14 +84,14 @@ public class UDBJSONFile<Profile>: UserDatabase {
   public func update<Profile>(_ record: UserRecord<Profile>) throws {
     let data = try encoder.encode(record)
     guard 0 == access(path(of: record.id), 0) else {
-      throw Exception.fault("record does not exist")
+      throw Exception.inexisting
     }
     try data.write(to: url(of: record.id))
   }
 
   public func delete(_ id: String) throws {
     guard 0 == unlink(path(of: id)) else {
-      throw Exception.fault("operation failure")
+      throw Exception.operation
     }
   }
 
@@ -101,7 +101,7 @@ public class UDBJSONFile<Profile>: UserDatabase {
       closedir(dir)
     } else if autocreation {
       guard 0 == mkdir(directory, mode_t(permission)) else {
-        throw Exception.fault("operation failure")
+        throw Exception.operation
       }
     }
     touch = time(nil)

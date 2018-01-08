@@ -259,6 +259,8 @@ let token = try man.login(id: "someone", password: "secret")
 **注意**: 默认状态下用户名密码长度都是 **[5,80]** 之间的字符串。
 详见 [用户名密码质量控制](#login--password-quality-control)。
 
+**注意** 如果最终用户希望用可以自动递增的UInt64作为用户id，请自行创建本项目分支版本进行调整。
+
 调用 `LoginManager.login()` 登录后产生的令牌是一个JWT字符串，可以用于HTTP服务器进行权鉴认证。
 
 该令牌应该送回给客户端（浏览器）用于后续安全会话的权限凭证。

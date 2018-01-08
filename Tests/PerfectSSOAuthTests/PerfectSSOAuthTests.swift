@@ -24,13 +24,13 @@ class PerfectSSOAuthTests: XCTestCase {
   let godpass = "rockford"
   let badpass = "treefrog"
   let folder = "/tmp"
-  let sqlite = "/tmp/users.db"
+  let sqlite = "/tmp/user.db"
   let mysql_hst = "maria"
   let mysql_usr = "root"
   let mysql_pwd = "rockford"
   let mysql_dbt = "test"
   let pgsql_usr = "rocky"
-  let table = "users"
+
   let profile = Profile(firstName: "rocky", lastName: "wei", age: 21, email: "rocky@perfect.org")
   let log = FileLogger("/tmp", GMT: false)
   let pgconnection = "postgresql://rocky:rockford@maria/test"
@@ -108,15 +108,15 @@ class PerfectSSOAuthTests: XCTestCase {
       let rocky = try manager.load(id: username)
       print(rocky)
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
     do {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       _ = try manager.login(id: username, password: badpass)
-    } catch Exception.fault(let reason) {
-      print("expected error:", reason)
+    } catch Exception.access {
+      print("expected access denied")
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
     do {
       let manager = LoginManager<Profile>(udb: udb, log: log)
@@ -130,14 +130,14 @@ class PerfectSSOAuthTests: XCTestCase {
       let y = try manager.verify(token: tok2)
       XCTAssertEqual(x.content["iss"] as? String ?? "X", y.content["iss"] as? String ?? "Y")
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
     do {
       let manager = LoginManager<Profile>(udb: udb, log: log)
       try manager.update(id: username, password: badpass)
       _ = try manager.login(id: username, password: badpass)
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
     do {
       let manager = LoginManager<Profile>(udb: udb, log: log, recycle: 3)
@@ -157,7 +157,7 @@ class PerfectSSOAuthTests: XCTestCase {
       let y2 = try? manager.verify(token: token2)
       XCTAssertNil(y2)
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
     do {
       let manager = LoginManager<Profile>(udb: udb, log: log)
@@ -177,13 +177,13 @@ class PerfectSSOAuthTests: XCTestCase {
   func testPostgreSQL() {
     let pg = PGConnection()
     _ = pg.connectdb(pgconnection)
-    _ = pg.exec(statement: "DROP TABLE \(table)")
+    _ = pg.exec(statement: "DROP TABLE users")
     _ = pg.exec(statement: "DROP TABLE tickets")
     do {
       let udb = try UDBPostgreSQL<Profile>(connection: pgconnection, sample: profile)
       testStandard(udb: udb, label: "postgresql")
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
   }
   func testMariaDB() {
@@ -192,14 +192,14 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTFail("connection failure")
       return
     }
-    _ = mysql.query(statement: "DROP TABLE \(table)")
+    _ = mysql.query(statement: "DROP TABLE users")
     _ = mysql.query(statement: "DROP TABLE tickets")
     do {
       let udb = try UDBMariaDB<Profile>(host: mysql_hst, user: mysql_usr,
        password: mysql_pwd, database: mysql_dbt, sample: profile)
       testStandard(udb: udb, label: "mariadb")
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
   }
   func testMySQL() {
@@ -208,14 +208,14 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTFail("connection failure")
       return
     }
-    _ = mysql.query(statement: "DROP TABLE \(table)")
+    _ = mysql.query(statement: "DROP TABLE users")
     _ = mysql.query(statement: "DROP TABLE tickets")
     do {
       let udb = try UDBMySQL<Profile>(host: mysql_hst, user: mysql_usr,
       password: mysql_pwd, database: mysql_dbt, sample: profile)
       testStandard(udb: udb, label: "mysql")
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
   }
   func testSQLite() {
@@ -224,7 +224,7 @@ class PerfectSSOAuthTests: XCTestCase {
       let udb = try UDBSQLite<Profile>(path: sqlite, sample: profile)
       testStandard(udb: udb, label: "sqlite")
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
   }
   func testJSONDir() {
@@ -233,7 +233,7 @@ class PerfectSSOAuthTests: XCTestCase {
       let udb = try UDBJSONFile<Profile>(directory: folder)
       testStandard(udb: udb, label: "jsonfile")
     } catch {
-      XCTFail(error.localizedDescription)
+      XCTFail("\(error)")
     }
   }
 }

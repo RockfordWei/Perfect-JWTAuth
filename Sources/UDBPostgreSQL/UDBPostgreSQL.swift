@@ -25,18 +25,18 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     db = PGConnection()
     let status = db.connectdb(connection)
     guard status == .ok else {
-      throw Exception.fault("Connection Failure, please check the connection string " + connection)
+      throw Exception.connection
     }
     touch = time(nil)
     encoder = JSONEncoder()
     decoder = JSONDecoder()
     let properties = try DataworkUtility.explainProperties(of: sample)
     guard !properties.isEmpty else {
-      throw Exception.fault("invalid profile structure")
+      throw Exception.malformed
     }
     fields = try properties.map { s -> Field in
       guard let tp = DataworkUtility.ANSITypeOf(s.type) else {
-        throw Exception.fault("incompatible type name: \(s.type)")
+        throw Exception.unsupported
       }
       return Field(name: s.name, type: tp)
     }
@@ -49,10 +49,10 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     """
     let result = try db.execute(statement: sql)
     let s = result.status()
-    let r = result.errorMessage()
+    //let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.fault(r)
+      throw Exception.operation
     }
     let sql2 = """
     CREATE TABLE IF NOT EXISTS tickets (
@@ -61,20 +61,20 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     """
     let result2 = try db.execute(statement: sql2)
     let s2 = result2.status()
-    let r2 = result2.errorMessage()
+    //let r2 = result2.errorMessage()
     result2.clear()
     guard s2 == .commandOK || s2 == .tuplesOK else {
-      throw Exception.fault(r2)
+      throw Exception.operation
     }
     let sql3 = """
     CREATE INDEX IF NOT EXISTS ticket_exp ON tickets( expiration)
     """
     let result3 = try db.execute(statement: sql3)
     let s3 = result3.status()
-    let r3 = result3.errorMessage()
+    //let r3 = result3.errorMessage()
     result3.clear()
     guard s3 == .commandOK || s3 == .tuplesOK else {
-      throw Exception.fault(r3)
+      throw Exception.operation
     }
   }
 
@@ -84,17 +84,17 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
 
   public func ban(_ ticket: String, _ expiration: time_t) throws {
     guard expiration > time(nil) else {
-      throw Exception.fault("ticket has already expired")
+      throw Exception.expired
     }
     self.autoflush()
 
     let sql = "INSERT INTO tickets(id, expiration) VALUES ($1, $2)"
     let result = db.exec(statement: sql, params: [ticket, expiration])
     let s = result.status()
-    let r = result.errorMessage()
+    // let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.fault(r)
+      throw Exception.operation
     }
   }
 
@@ -116,13 +116,13 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
 
   public func insert<Profile>(_ record: UserRecord<Profile>) throws {
     if exists(record.id) {
-      throw Exception.fault("user has already registered")
+      throw Exception.violation
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       var dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.fault("json encoding failure")
+        throw Exception.json
     }
     dic["id"] = record.id
     dic["salt"] = record.salt
@@ -139,7 +139,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       if let v = dic[columns[i]] {
         values.append(v)
       } else {
-        throw Exception.fault("unexpected field \(columns[i])")
+        throw Exception.unsupported
       }
     }
     let col = columns.joined(separator: ",")
@@ -147,22 +147,22 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     sql = "INSERT INTO users (\(col)) VALUES(\(que))"
     let result = db.exec(statement: sql, params: values)
     let s = result.status()
-    let r = result.errorMessage()
+    // let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.fault(r)
+      throw Exception.operation
     }
   }
 
   public func update<Profile>(_ record: UserRecord<Profile>) throws {
     guard exists(record.id) else {
-      throw Exception.fault("user does not exists")
+      throw Exception.inexisting
     }
     let data = try encoder.encode(record.profile)
     let bytes:[UInt8] = data.map { $0 }
     guard let json = String(validatingUTF8:bytes),
       var dic = try json.jsonDecode() as? [String: Any] else {
-        throw Exception.fault("json encoding failure")
+        throw Exception.json
     }
     dic["salt"] = record.salt
     dic["shadow"] = record.shadow
@@ -177,7 +177,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       if let v = dic[col] {
         values.append(v)
       } else {
-        throw Exception.fault("unexpected field: \(col)")
+        throw Exception.unsupported
       }
     }
     values.append(record.id)
@@ -186,24 +186,24 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     let sql = "UPDATE users SET \(sentence) WHERE id = $\(idNum)"
     let result = db.exec(statement: sql, params: values)
     let s = result.status()
-    let r = result.errorMessage()
+    // let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.fault(r)
+      throw Exception.operation
     }
   }
 
   public func delete(_ id: String) throws {
     guard exists(id) else {
-      throw Exception.fault("user does not exist")
+      throw Exception.violation
     }
     let sql = "DELETE FROM users WHERE id = $1"
     let result = db.exec(statement: sql, params: [id])
     let s = result.status()
-    let r = result.errorMessage()
+    // let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.fault(r)
+      throw Exception.operation
     }
   }
 
@@ -213,18 +213,18 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     let  sql = "SELECT id, salt, shadow, \(col) FROM users WHERE id = $1 LIMIT 1"
     let r = db.exec(statement: sql, params: [id])
     let s = r.status()
-    let msg = r.errorMessage()
+    // let msg = r.errorMessage()
     guard s == .commandOK || s == .tuplesOK,
       r.numTuples() == 1 else {
         r.clear()
-        throw Exception.fault(msg)
+        throw Exception.operation
     }
     guard let uid = r.getFieldString(tupleIndex: 0, fieldIndex: 0),
       let salt = r.getFieldString(tupleIndex: 0, fieldIndex: 1),
       let shadown = r.getFieldString(tupleIndex: 0, fieldIndex: 2),
       uid == id else {
         r.clear()
-        throw Exception.fault("unexpected select result")
+        throw Exception.operation
     }
     var dic: [String: Any] = [:]
     for i in 0 ..< fields.count {
@@ -248,7 +248,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       } else if tp == "BLOB" {
         dic[fields[i].name] = r.getFieldBlob(tupleIndex: 0, fieldIndex: j)
       } else {
-        throw Exception.fault("incompatible SQL type \(tp)")
+        throw Exception.unsupported
       }
     }
     r.clear()
@@ -259,7 +259,7 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
       let u = UserRecord(id: id, salt: salt, shadow: shadown, profile: profile)
       return u
     } catch {
-      throw Exception.fault("json encoding / decoding failure")
+      throw Exception.json
     }
   }
 

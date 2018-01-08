@@ -8,6 +8,48 @@ public enum Exception: Error {
 
   /// an error with a readable reason.
   case fault(String)
+
+  /// something about json
+  case json
+
+  /// bad user name
+  case username
+
+  /// bad password
+  case password
+
+  /// encryption failure
+  case encryption
+
+  /// digestion failure
+  case digestion
+
+  /// access denied
+  case access
+
+  /// bad format
+  case malformed
+
+  /// bad request
+  case request
+
+  /// expired
+  case expired
+
+  /// violation
+  case violation
+
+  /// record not found
+  case inexisting
+
+  /// operation failure
+  case operation
+
+  /// unsupported
+  case unsupported
+
+  /// connection failure
+  case connection
 }
 
 /// a log file record
@@ -148,7 +190,7 @@ public final class DataworkUtility {
     guard let json = String.init(bytes: data, encoding: .utf8),
       let payload = try json.jsonDecode() as? [String:Any]
       else {
-        throw Exception.fault("json decoding failure")
+        throw Exception.json
     }
     var result:[Field] = []
     for (key, value) in payload {
