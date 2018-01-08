@@ -670,6 +670,10 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
         let cookie = try self.login(request: request)
         response.addCookie(cookie)
         break
+      case _config.renew:
+        let cookie = try self.renew(request: request)
+        response.addCookie(cookie)
+        break
       case _config.logout:
         try self.logout(request: request)
         break
@@ -706,11 +710,25 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
 
     // URIs / routes
 
+    /// uri to registration
     public var reg = "/api/reg"
+
+    /// uri to login
     public var login = "/api/login"
+
+    /// uri to logoout
     public var logout = "/api/logout"
+
+    /// uri to renew token
+    public var renew = "/api/renew"
+
+    /// uri to update user profile
     public var update = "/api/update"
+
+    /// uri to modify password
     public var modpass = "/api/modpass"
+
+    /// uri to drop user file
     public var drop = "/api/drop"
 
     // variables -
@@ -728,6 +746,9 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
 
     /// jwt payload part for user id. modification is not suggested.
     public var aud = "aud"
+
+    /// jwt expiration time, in seconds, 600 (10 min) by default
+    public var timeout = 600
   }
 
   let _man: LoginManager<Profile>
@@ -780,7 +801,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
       name: _config.jwt,
       value: token,
       domain: "",
-      expires: .relativeSeconds(600),
+      expires: .relativeSeconds(_config.timeout),
       path: "/",
       secure: false,
       httpOnly: true,
@@ -839,6 +860,28 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     }
     let p = try _man.load(id: id)
     return (id, p)
+  }
+
+  internal func renew(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
+    guard let token = jwt(of: request)
+      else {
+        throw Exception.request
+    }
+    let (_, content) = try _man.verify(token: token)
+    guard let id = content[_config.aud] as? String else {
+      throw Exception.malformed
+    }
+    let renewed = try _man.renew(id: id)
+    return HTTPCookie(
+      name: _config.jwt,
+      value: renewed,
+      domain: "",
+      expires: .relativeSeconds(_config.timeout),
+      path: "/",
+      secure: false,
+      httpOnly: true,
+      sameSite: .strict
+    )
   }
 
   internal func logout(request: HTTPRequest) throws {
