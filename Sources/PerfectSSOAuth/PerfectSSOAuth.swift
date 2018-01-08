@@ -648,9 +648,15 @@ public class LoginManager<Profile> where Profile: Codable {
   }
 }
 
-
+/// HTTP REST API Access Controller
 public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable {
 
+  /// To end users: please add this instance filter to your HTTP server, like this:
+  /// ```
+  /// let requestFilters: [(HTTPRequestFilter, HTTPFilterPriority)] = [(acs, HTTPFilterPriority.high)]
+  /// server.setRequestFilters(requestFilters)
+  /// ```
+  /// it will protect all resources by a configured login manager.
   public func filter(request: HTTPRequest, response: HTTPResponse,
                      callback: (HTTPRequestFilterResult) -> ()) {
 
@@ -695,9 +701,11 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     }
   }
 
+  /// configuration of the Access Control
   public struct Configuration: Codable {
 
-    /// URIs / routes
+    // URIs / routes
+
     public var reg = "/api/reg"
     public var login = "/api/login"
     public var logout = "/api/logout"
@@ -705,11 +713,20 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     public var modpass = "/api/modpass"
     public var drop = "/api/drop"
 
-    /// variables
+    // variables -
+    /// user id. modification is not suggested.
     public var id = "id"
+
+    /// user password. modification is not suggested.
     public var password = "password"
+
+    /// user profile, as a json string
     public var profile = "profile"
+
+    /// jwt cookie id. modification is not suggested.
     public var jwt = "jwt"
+
+    /// jwt payload part for user id. modification is not suggested.
     public var aud = "aud"
   }
 
@@ -718,6 +735,9 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
   let _encoder: JSONEncoder
   let _decoder: JSONDecoder
 
+  /// constructor: setup an HTTP access controller by a login manager and its configuration
+  /// - parameter manager: the login manager instance
+  /// - parameter configuration: routes and string literials settings for this instance
   public init(_ manager: LoginManager<Profile>, configuration: Configuration) {
     _man = manager
     _config = configuration
@@ -731,7 +751,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     return try _decoder.decode(Profile.self, from: data)
   }
 
-  public func register(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
+  internal func register(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
     guard
       request.uri == _config.reg,
       let id = request.param(name: _config.id),
@@ -744,7 +764,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     return try login(id: id, password: password)
   }
 
-  public func login(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
+  internal func login(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
     guard request.uri == _config.login,
       let id = request.param(name: _config.id),
       let password = request.param(name: _config.password)
@@ -768,7 +788,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     )
   }
 
-  public func jwt(of: HTTPRequest) -> String? {
+  internal func jwt(of: HTTPRequest) -> String? {
     var token = ""
     for (k, v) in of.cookies {
       if k == _config.jwt {
@@ -779,7 +799,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     return token
   }
 
-  public func update(request: HTTPRequest) throws {
+  internal func update(request: HTTPRequest) throws {
     guard request.uri == _config.update,
       let token = jwt(of: request),
       let json = request.param(name: _config.profile)
@@ -794,7 +814,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     try _man.update(id: id, profile: p)
   }
 
-  public func modpass(request: HTTPRequest) throws {
+  internal func modpass(request: HTTPRequest) throws {
     guard request.uri == _config.modpass,
       let token = jwt(of: request),
       let newpass = request.param(name: _config.password)
@@ -808,7 +828,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     try _man.update(id: id, password: newpass)
   }
 
-  public func access(request: HTTPRequest) throws -> (String,Profile) {
+  internal func access(request: HTTPRequest) throws -> (String,Profile) {
     guard let token = jwt(of: request)
       else {
         throw Exception.request
@@ -821,7 +841,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     return (id, p)
   }
 
-  public func logout(request: HTTPRequest) throws {
+  internal func logout(request: HTTPRequest) throws {
     guard request.uri == _config.logout,
       let token = jwt(of: request)
       else {
@@ -830,7 +850,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     _ = try _man.verify(token: token, logout: true)
   }
 
-  public func drop(request: HTTPRequest) throws {
+  internal func drop(request: HTTPRequest) throws {
     guard request.uri == _config.drop,
       let token = jwt(of: request) else {
         throw Exception.request
