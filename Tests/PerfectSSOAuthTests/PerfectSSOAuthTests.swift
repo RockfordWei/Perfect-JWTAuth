@@ -10,6 +10,8 @@ import UDBPostgreSQL
 import PerfectMySQL
 import PerfectPostgreSQL
 import PerfectLib
+import PerfectHTTP
+import PerfectHTTPServer
 import Dispatch
 
 struct Profile: Codable {
@@ -62,6 +64,56 @@ class PerfectSSOAuthTests: XCTestCase {
       users[u] = p
     }
     expects.removeAll(keepingCapacity: false)
+  }
+
+  func testHTTP(udb: UserDatabase, label: String) {
+    print("preparing http test for \(label) ...")
+    let man = LoginManager<Profile>(udb: udb, log: log)
+    let acs = HTTPAccessControl<Profile>(man, configuration: HTTPAccessControl<Profile>.Configuration())
+    let server = HTTPServer()
+    server.serverPort = 8383
+    let requestFilters: [(HTTPRequestFilter, HTTPFilterPriority)] = [(acs, HTTPFilterPriority.high)]
+    server.setRequestFilters(requestFilters)
+    var routes = Routes()
+    routes.add(Route(method: .get, uri: "/**", handler: {
+      request, response in
+      response.addHeader(.contentType, value: "text/json")
+      response.appendBody(string: try! response.request.scratchPad.jsonEncodedString())
+      response.completed()
+    }))
+    let q = DispatchQueue(label: "webhttp" + label)
+    let g = DispatchGroup()
+    g.enter()
+    q.async {
+      do {
+        try server.start()
+      } catch {
+        XCTFail("\(error)")
+      }
+      g.leave()
+    }
+    guard let url = URL(string: "http://localhost:8383") else {
+      server.stop()
+      g.wait()
+      return
+    }
+    let config = URLSessionConfiguration.default
+    let session = URLSession(configuration: config)
+    let task = session.dataTask(with: url) { data, code, err in
+      if let bytes: [UInt8] = (data?.map { $0 }),
+        let str = String(validatingUTF8: bytes),
+        let resp = code {
+        print("server responded:", resp.expectedContentLength)
+        print("server replied:", str)
+      } else if let e = err {
+        XCTFail("\(e)")
+      } else {
+        XCTFail("unknown")
+      }
+      server.stop()
+    }
+    task.resume()
+    g.wait()
   }
 
   func testLeak(udb: UserDatabase, label: String) {
@@ -232,6 +284,7 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
       testStandard(udb: udb, label: "jsonfile")
+      testHTTP(udb: udb, label: "jsonfile")
     } catch {
       XCTFail("\(error)")
     }

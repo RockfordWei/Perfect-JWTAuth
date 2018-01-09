@@ -49,10 +49,10 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     """
     let result = try db.execute(statement: sql)
     let s = result.status()
-    //let r = result.errorMessage()
+    let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.operation
+      throw Exception.fault(r)
     }
     let sql2 = """
     CREATE TABLE IF NOT EXISTS tickets (
@@ -61,20 +61,20 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     """
     let result2 = try db.execute(statement: sql2)
     let s2 = result2.status()
-    //let r2 = result2.errorMessage()
+    let r2 = result2.errorMessage()
     result2.clear()
     guard s2 == .commandOK || s2 == .tuplesOK else {
-      throw Exception.operation
+      throw Exception.fault(r2)
     }
     let sql3 = """
     CREATE INDEX IF NOT EXISTS ticket_exp ON tickets( expiration)
     """
     let result3 = try db.execute(statement: sql3)
     let s3 = result3.status()
-    //let r3 = result3.errorMessage()
+    let r3 = result3.errorMessage()
     result3.clear()
     guard s3 == .commandOK || s3 == .tuplesOK else {
-      throw Exception.operation
+      throw Exception.fault(r3)
     }
   }
 
@@ -91,10 +91,10 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     let sql = "INSERT INTO tickets(id, expiration) VALUES ($1, $2)"
     let result = db.exec(statement: sql, params: [ticket, expiration])
     let s = result.status()
-    // let r = result.errorMessage()
+    let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.operation
+      throw Exception.fault(r)
     }
   }
 
@@ -147,10 +147,10 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     sql = "INSERT INTO users (\(col)) VALUES(\(que))"
     let result = db.exec(statement: sql, params: values)
     let s = result.status()
-    // let r = result.errorMessage()
+    let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.operation
+      throw Exception.fault(r)
     }
   }
 
@@ -186,10 +186,10 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     let sql = "UPDATE users SET \(sentence) WHERE id = $\(idNum)"
     let result = db.exec(statement: sql, params: values)
     let s = result.status()
-    // let r = result.errorMessage()
+    let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.operation
+      throw Exception.fault(r)
     }
   }
 
@@ -200,10 +200,10 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     let sql = "DELETE FROM users WHERE id = $1"
     let result = db.exec(statement: sql, params: [id])
     let s = result.status()
-    // let r = result.errorMessage()
+    let r = result.errorMessage()
     result.clear()
     guard s == .commandOK || s == .tuplesOK else {
-      throw Exception.operation
+      throw Exception.fault(r)
     }
   }
 
@@ -213,11 +213,11 @@ public class UDBPostgreSQL<Profile>: UserDatabase {
     let  sql = "SELECT id, salt, shadow, \(col) FROM users WHERE id = $1 LIMIT 1"
     let r = db.exec(statement: sql, params: [id])
     let s = r.status()
-    // let msg = r.errorMessage()
+    let msg = r.errorMessage()
     guard s == .commandOK || s == .tuplesOK,
       r.numTuples() == 1 else {
         r.clear()
-        throw Exception.operation
+        throw Exception.fault(msg)
     }
     guard let uid = r.getFieldString(tupleIndex: 0, fieldIndex: 0),
       let salt = r.getFieldString(tupleIndex: 0, fieldIndex: 1),

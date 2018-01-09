@@ -660,19 +660,46 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
   public func filter(request: HTTPRequest, response: HTTPResponse,
                      callback: (HTTPRequestFilterResult) -> ()) {
 
+    // CSRF checking first
+    guard let o = origin(of: request), let h = host(of: request) else {
+      self.accessDeny(to: response, with: "CSRF undefined")
+      callback(.halt(request, response))
+      return
+    }
+
+    // override CSRF if blacklisted
+    if _config.blacklist.contains(o) {
+      self.accessDeny(to: response, with: "CSRF actively rejected")
+      callback(.halt(request, response))
+      return
+    }
+
+    // CSRF checking
+    if o != h {
+      // override CSRF if whitelist presents
+      guard _config.whitelist.contains(o) else {
+        self.accessDeny(to: response, with: "CSRF rejected")
+        callback(.halt(request, response))
+        return
+      }
+    }
+
+    var reply: [String: String] = [_config.jsonerr: ""]
+
     do {
+
       switch request.uri {
       case _config.reg:
-        let cookie = try self.register(request: request)
-        response.addCookie(cookie)
+        let jwt = try self.register(request: request)
+        reply[_config.jwt] = jwt
         break
       case _config.login:
-        let cookie = try self.login(request: request)
-        response.addCookie(cookie)
+        let jwt = try self.login(request: request)
+        reply[_config.jwt] = jwt
         break
       case _config.renew:
-        let cookie = try self.renew(request: request)
-        response.addCookie(cookie)
+        let jwt = try self.renew(request: request)
+        reply[_config.jwt] = jwt
         break
       case _config.logout:
         try self.logout(request: request)
@@ -688,21 +715,24 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
         break
       default:
         let (id, profile) = try self.access(request: request)
-        response.request.scratchPad["id"] = id
-        response.request.scratchPad["profile"] = profile
+        response.request.scratchPad[_config.id] = id
+        response.request.scratchPad[_config.profile] = profile
         callback(.continue(request, response))
         return
       }
-      response.setHeader(.contentType, value: "text/json")
-      response.setBody(string: "{\"error\":\"\"}")
-      response.completed()
-      callback(.execute(request, response))
+      response.setBody(string: try reply.jsonEncodedString())
+    } catch Exception.fault(let errmsg) {
+      response.status = .forbidden
+      response.setBody(string: "{\"\(_config.jsonerr)\":\"\(errmsg)\"}")
     } catch {
-      response.setHeader(.contentType, value: "text/json")
-      response.setBody(string: "{\"error\":\"\(error.localizedDescription)\"}")
-      response.completed()
-      callback(.halt(request, response))
+      let errmsg = "\(error)".stringByEncodingURL
+      response.status = .forbidden
+      response.setBody(string: "{\"\(_config.jsonerr)\":\"\(errmsg)\"}")
     }
+    response.setHeader(.contentType, value: "text/json")
+    response.setHeader(.wwwAuthenticate, value: self.authentication())
+    response.completed()
+    callback(.halt(request, response))
   }
 
   /// configuration of the Access Control
@@ -735,20 +765,35 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     /// user id. modification is not suggested.
     public var id = "id"
 
+    /// jwt token definition for user id. modification is not suggested.
+    public var aud = "aud"
+
+
+    /// jwt token definition for json response. modification is not suggested.
+    public var jwt = "jwt"
+
     /// user password. modification is not suggested.
     public var password = "password"
 
     /// user profile, as a json string
     public var profile = "profile"
 
-    /// jwt cookie id. modification is not suggested.
-    public var jwt = "jwt"
+    /// keyword reserved for "error". modification is not suggested
+    public var jsonerr = "error"
 
-    /// jwt payload part for user id. modification is not suggested.
-    public var aud = "aud"
+    /// domains that are allowed to override CSRF
+    /// **CAUTION** LEAVE IT AS BLANK AS POSSIBLE
+    public var whitelist: Set<String> = []
 
-    /// jwt expiration time, in seconds, 600 (10 min) by default
-    public var timeout = 600
+    /// domains that are rejected all the time, even CSRF applied.
+    public var blacklist: Set<String> = []
+
+    /// realm name, **MUST** cusotmize
+    public var realm = "perfect"
+
+    /// disable self registration, turn it on if need,
+    /// for example, an invitation only membership
+    public var noreg = false
   }
 
   let _man: LoginManager<Profile>
@@ -772,8 +817,49 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     return try _decoder.decode(Profile.self, from: data)
   }
 
-  internal func register(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
-    guard
+  internal func accessDeny(to: HTTPResponse, with: String) {
+    to.status = .forbidden
+    to.setHeader(.contentType, value: "text/json")
+    to.setHeader(.wwwAuthenticate, value: self.authentication())
+    to.setBody(string: "{\"error\":\"\(with)\"}")
+    to.completed()
+  }
+
+  internal func authentication() -> String {
+    return "Basic realm=\"\(_config.realm)\", charset=\"UTF-8\""
+  }
+
+  internal func origin(of: HTTPRequest) -> String? {
+    let o: String
+    if let origin = of.header(.origin) {
+      o = origin
+    } else if let referer = of.header(.referer) {
+      o = referer
+    } else if let forward = of.header(.xForwardedFor) {
+      o = forward
+    } else {
+      o = ""
+    }
+    return o.isEmpty ? nil : o
+  }
+
+  internal func host(of: HTTPRequest) -> String? {
+    let h: String
+    if let host = of.header(.host) {
+      h = host
+    } else if let forward = of.header(.xForwardedHost) {
+      h = forward
+    } else {
+      h = ""
+    }
+    return h.isEmpty ? nil : h
+  }
+
+  internal func register(request: HTTPRequest) throws -> String {
+    if _config.noreg {
+      throw Exception.fault("self registration has been disabled")
+    }
+    guard request.method == .post,
       request.uri == _config.reg,
       let id = request.param(name: _config.id),
       let password = request.param(name: _config.password),
@@ -785,8 +871,9 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     return try login(id: id, password: password)
   }
 
-  internal func login(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
-    guard request.uri == _config.login,
+  internal func login(request: HTTPRequest) throws -> String {
+    guard request.method == .post,
+      request.uri == _config.login,
       let id = request.param(name: _config.id),
       let password = request.param(name: _config.password)
       else {
@@ -795,33 +882,23 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     return try login(id: id, password: password)
   }
 
-  internal func login(id: String, password: String) throws -> PerfectHTTP.HTTPCookie {
-    let token = try _man.login(id: id, password: password)
-    return HTTPCookie(
-      name: _config.jwt,
-      value: token,
-      domain: "",
-      expires: .relativeSeconds(_config.timeout),
-      path: "/",
-      secure: false,
-      httpOnly: true,
-      sameSite: .strict
-    )
+  internal func login(id: String, password: String) throws -> String {
+    return try _man.login(id: id, password: password)
   }
 
+
   internal func jwt(of: HTTPRequest) -> String? {
-    var token = ""
-    for (k, v) in of.cookies {
-      if k == _config.jwt {
-        token = v
-      }
+    let bearer = "Bearer "
+    guard let token = of.header(.authorization),
+      token.hasPrefix(bearer) else {
+      return nil
     }
-    if token.isEmpty { return nil }
-    return token
+    return String(token.dropFirst(bearer.count))
   }
 
   internal func update(request: HTTPRequest) throws {
-    guard request.uri == _config.update,
+    guard request.method == .post,
+      request.uri == _config.update,
       let token = jwt(of: request),
       let json = request.param(name: _config.profile)
       else {
@@ -836,7 +913,8 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
   }
 
   internal func modpass(request: HTTPRequest) throws {
-    guard request.uri == _config.modpass,
+    guard request.method == .post,
+      request.uri == _config.modpass,
       let token = jwt(of: request),
       let newpass = request.param(name: _config.password)
       else {
@@ -862,8 +940,9 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     return (id, p)
   }
 
-  internal func renew(request: HTTPRequest) throws -> PerfectHTTP.HTTPCookie {
-    guard let token = jwt(of: request)
+  internal func renew(request: HTTPRequest) throws -> String {
+    guard request.method == .post,
+      let token = jwt(of: request)
       else {
         throw Exception.request
     }
@@ -871,21 +950,12 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     guard let id = content[_config.aud] as? String else {
       throw Exception.malformed
     }
-    let renewed = try _man.renew(id: id)
-    return HTTPCookie(
-      name: _config.jwt,
-      value: renewed,
-      domain: "",
-      expires: .relativeSeconds(_config.timeout),
-      path: "/",
-      secure: false,
-      httpOnly: true,
-      sameSite: .strict
-    )
+    return try _man.renew(id: id)
   }
 
   internal func logout(request: HTTPRequest) throws {
-    guard request.uri == _config.logout,
+    guard request.method == .post,
+      request.uri == _config.logout,
       let token = jwt(of: request)
       else {
         throw Exception.request
@@ -894,7 +964,8 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
   }
 
   internal func drop(request: HTTPRequest) throws {
-    guard request.uri == _config.drop,
+    guard request.method == .post,
+      request.uri == _config.drop,
       let token = jwt(of: request) else {
         throw Exception.request
     }

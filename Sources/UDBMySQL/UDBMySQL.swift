@@ -69,7 +69,7 @@ public class UDBMySQL<Profile>: UserDatabase {
     salt VARCHAR(256), shadow VARCHAR(1024), \(fieldDescription))
     """
     guard db.query(statement: sql) else {
-      throw Exception.operation
+      throw Exception.fault(db.errorMessage())
     }
     let sql2 = """
     CREATE TABLE IF NOT EXISTS tickets (
@@ -77,13 +77,13 @@ public class UDBMySQL<Profile>: UserDatabase {
     expiration INTEGER)
     """
     guard db.query(statement: sql2) else {
-      throw Exception.operation
+      throw Exception.fault(db.errorMessage())
     }
     let sql3 = """
     CREATE INDEX IF NOT EXISTS ticket_exp ON tickets( expiration)
     """
     guard db.query(statement: sql3) else {
-      throw Exception.operation
+      throw Exception.fault(db.errorMessage())
     }
   }
 
@@ -102,12 +102,12 @@ public class UDBMySQL<Profile>: UserDatabase {
     defer { stmt.close() }
     guard stmt.prepare(statement: sql)
       else {
-        throw Exception.operation
+        throw Exception.fault(db.errorMessage())
     }
     stmt.bindParam(ticket)
     stmt.bindParam(expiration)
     guard stmt.execute() else {
-      throw Exception.operation
+      throw Exception.fault(db.errorMessage())
     }
   }
 
@@ -177,7 +177,7 @@ public class UDBMySQL<Profile>: UserDatabase {
     defer { stmt.close() }
     guard stmt.prepare(statement: sql)
       else {
-        throw Exception.operation
+        throw Exception.fault(db.errorMessage())
     }
     stmt.bindParam(record.id)
     stmt.bindParam(record.salt)
@@ -187,7 +187,7 @@ public class UDBMySQL<Profile>: UserDatabase {
       try stmt.bindParameter(x)
     }
     guard stmt.execute() else {
-      throw Exception.operation
+      throw Exception.fault(db.errorMessage())
     }
   }
 
@@ -208,7 +208,7 @@ public class UDBMySQL<Profile>: UserDatabase {
     let stmt = MySQLStmt(db)
     defer { stmt.close() }
     guard stmt.prepare(statement: sql) else {
-      throw Exception.operation
+      throw Exception.fault(db.errorMessage())
     }
     stmt.bindParam(record.salt)
     stmt.bindParam(record.shadow)
@@ -218,7 +218,7 @@ public class UDBMySQL<Profile>: UserDatabase {
     }
     stmt.bindParam(record.id)
     guard stmt.execute() else {
-      throw Exception.operation
+      throw Exception.fault(db.errorMessage())
     }
   }
 
@@ -231,10 +231,10 @@ public class UDBMySQL<Profile>: UserDatabase {
     defer { stmt.close() }
     guard stmt.prepare(statement: sql)
       else {
-        throw Exception.operation
+        throw Exception.fault(db.errorMessage())
     }
     stmt.bindParam(id)
-    guard stmt.execute() else { throw Exception.operation }
+    guard stmt.execute() else { throw Exception.fault(db.errorMessage()) }
     let fetched = stmt.results().forEachRow { rec in
       let _id = rec[0] as? String
       let _salt = rec[1] as? String
@@ -273,11 +273,11 @@ public class UDBMySQL<Profile>: UserDatabase {
     let sql = "DELETE FROM users WHERE id = ?"
     guard stmt.prepare(statement: sql)
       else {
-        throw Exception.operation
+        throw Exception.fault(db.errorMessage())
     }
     stmt.bindParam(id)
     guard stmt.execute() else {
-      throw Exception.operation
+      throw Exception.fault(db.errorMessage())
     }
   }
 }
