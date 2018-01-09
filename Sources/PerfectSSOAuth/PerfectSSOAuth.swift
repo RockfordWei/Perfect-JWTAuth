@@ -687,7 +687,6 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     var reply: [String: String] = [_config.jsonerr: ""]
 
     do {
-
       switch request.uri {
       case _config.reg:
         let jwt = try self.register(request: request)
@@ -716,7 +715,9 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
       default:
         let (id, profile) = try self.access(request: request)
         response.request.scratchPad[_config.id] = id
-        response.request.scratchPad[_config.profile] = profile
+        if let json = try? _encoder.encode(profile) {
+          response.request.scratchPad[_config.profile] = String(data: json, encoding: .utf8)
+        }
         callback(.continue(request, response))
         return
       }
@@ -726,7 +727,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
       response.setBody(string: "{\"\(_config.jsonerr)\":\"\(errmsg)\"}")
     } catch {
       let errmsg = "\(error)".stringByEncodingURL
-      response.status = .forbidden
+      response.status = .unauthorized
       response.setBody(string: "{\"\(_config.jsonerr)\":\"\(errmsg)\"}")
     }
     response.setHeader(.contentType, value: "text/json")

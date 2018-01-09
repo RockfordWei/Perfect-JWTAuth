@@ -14,7 +14,14 @@ import PerfectHTTP
 import PerfectHTTPServer
 import Dispatch
 
-struct Profile: Codable {
+struct Profile: Codable, Equatable {
+  static func ==(lhs: Profile, rhs: Profile) -> Bool {
+    return lhs.firstName == rhs.firstName
+      && lhs.lastName == rhs.lastName
+      && lhs.age == rhs.age
+      && lhs.email == rhs.email
+  }
+
   public var firstName = ""
   public var lastName = ""
   public var age = 0
@@ -66,10 +73,43 @@ class PerfectSSOAuthTests: XCTestCase {
     expects.removeAll(keepingCapacity: false)
   }
 
+  func request(url: String, method: String = "GET", headers:[String: String] = [:], fields: [String:String] = [:]) throws -> [String: Any] {
+    guard let u = URL(string: url) else {
+      throw Exception.fault("url malformed")
+    }
+    var req = URLRequest(url: u)
+    for (k,v) in headers {
+      req.setValue(v, forHTTPHeaderField: k)
+    }
+    req.httpMethod = method
+    let post:[String] = fields.map { $0.key + "=" + $0.value.stringByEncodingURL }
+    if post.count > 0 {
+      req.httpBody = post.joined(separator: "&").data(using: .utf8)
+    }
+    let g = DispatchGroup()
+    let session = URLSession(configuration: URLSessionConfiguration.default)
+    var result = ""
+    g.enter()
+    let task = session.dataTask(with: req) { data, _, err in
+      if let bytes: [UInt8] = (data?.map { $0 }) {
+        result = String(validatingUTF8: bytes) ?? ""
+      } else if let e = err {
+        result = "\(e)"
+      } else {
+        result = "error"
+      }
+      g.leave()
+    }
+    task.resume()
+    g.wait()
+    return try result.jsonDecode() as? [String: Any] ?? [:]
+  }
+
   func testHTTP(udb: UserDatabase, label: String) {
-    print("preparing http test for \(label) ...")
+    print("preparing http test for \(label) ... +++++++++++++++++++++")
     let man = LoginManager<Profile>(udb: udb, log: log)
-    let acs = HTTPAccessControl<Profile>(man, configuration: HTTPAccessControl<Profile>.Configuration())
+    let conf = HTTPAccessControl<Profile>.Configuration()
+    let acs = HTTPAccessControl<Profile>(man, configuration: conf)
     let server = HTTPServer()
     server.serverPort = 8383
     let requestFilters: [(HTTPRequestFilter, HTTPFilterPriority)] = [(acs, HTTPFilterPriority.high)]
@@ -77,43 +117,113 @@ class PerfectSSOAuthTests: XCTestCase {
     var routes = Routes()
     routes.add(Route(method: .get, uri: "/**", handler: {
       request, response in
-      response.addHeader(.contentType, value: "text/json")
-      response.appendBody(string: try! response.request.scratchPad.jsonEncodedString())
+      response.setHeader(.contentType, value: "text/json")
+      let ret: String
+      do {
+        ret = try response.request.scratchPad.jsonEncodedString()
+      } catch {
+        let e = "\(error)"
+        ret = "{\"error\": \"json failure \(e.stringByEncodingURL)\"}"
+      }
+      response.setBody(string: ret)
       response.completed()
     }))
+    server.addRoutes(routes)
     let q = DispatchQueue(label: "webhttp" + label)
     let g = DispatchGroup()
     g.enter()
     q.async {
-      do {
-        try server.start()
-      } catch {
-        XCTFail("\(error)")
-      }
+      try! server.start()
       g.leave()
     }
-    guard let url = URL(string: "http://localhost:8383") else {
-      server.stop()
-      g.wait()
-      return
+    sleep(3)
+    var jwt = ""
+    do {
+      var r = try request(url: "http://localhost:8383/")
+      XCTAssertEqual(r["error"] as? String ?? "", "CSRF undefined")
+      r = try request(url: "http://localhost:8383/", headers: ["origin":"localhost:8383"])
+      XCTAssertEqual(r["error"] as? String ?? "", "request")
+      let data = try JSONEncoder().encode(profile)
+      let json = String(data: data, encoding: .utf8) ?? ""
+      r = try request(url: "http://localhost:8383/api/reg",
+                           method: "POST", headers: ["origin":"localhost:8383"],
+                  fields: ["id":username, "password": godpass, "profile": json])
+      jwt = r["jwt"] as? String ?? ""
+      print("Bearer ", jwt)
+      r = try request(url: "http://localhost:8383/",
+                           headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt)"])
+      XCTAssertEqual(r["id"] as? String ?? "", username)
+      var p = r["profile"] as? String ?? ""
+      print("profile", p)
+      var prof = try! JSONDecoder().decode(Profile.self, from: p.data(using: .utf8)!)
+      XCTAssertEqual(prof, profile)
+      r = try request(url: "http://localhost:8383/api/login", method: "POST",
+                      headers: ["origin": "localhost:8383"], fields: ["id": username, "password": godpass])
+      jwt = r["jwt"] as? String ?? ""
+      print("Bearer ", jwt)
+      r = try request(url: "http://localhost:8383/some_where_else",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt)"])
+      XCTAssertEqual(r["id"] as? String ?? "", username)
+      p = r["profile"] as? String ?? ""
+      print("profile", p)
+      prof = try! JSONDecoder().decode(Profile.self, from: p.data(using: .utf8)!)
+      XCTAssertEqual(prof, profile)
+      r = try request(url: "http://localhost:8383/api/renew", method: "POST",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt)"])
+      let jwt2 = r["jwt"] as? String ?? ""
+      print("Bearer ", jwt)
+      XCTAssertNotEqual(jwt, jwt2)
+      r = try request(url: "http://localhost:8383/another_place",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt2)"])
+      p = r["profile"] as? String ?? ""
+      print("profile", p)
+      prof = try! JSONDecoder().decode(Profile.self, from: p.data(using: .utf8)!)
+      XCTAssertEqual(prof, profile)
+      _ = try request(url: "http://localhost:8383/api/logout", method: "POST",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt)"])
+    } catch {
+      XCTFail("\(error)")
     }
-    let config = URLSessionConfiguration.default
-    let session = URLSession(configuration: config)
-    let task = session.dataTask(with: url) { data, code, err in
-      if let bytes: [UInt8] = (data?.map { $0 }),
-        let str = String(validatingUTF8: bytes),
-        let resp = code {
-        print("server responded:", resp.expectedContentLength)
-        print("server replied:", str)
-      } else if let e = err {
-        XCTFail("\(e)")
-      } else {
-        XCTFail("unknown")
-      }
-      server.stop()
+    do {
+      let r = try request(url: "http://localhost:8383/",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt)"])
+      XCTAssertEqual(r["error"] as? String ?? "", "access")
+    } catch {
+      XCTFail("\(error)")
     }
-    task.resume()
+    do {
+      var r = try request(url: "http://localhost:8383/api/login", method: "POST",
+                      headers: ["origin": "localhost:8383"], fields: ["id": username, "password": godpass])
+      jwt = r["jwt"] as? String ?? ""
+      r = try request(url: "http://localhost:8383/api/modpass", method: "POST",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt)"],
+                      fields: ["password": badpass])
+      XCTAssertEqual(r["error"] as? String ?? "", "")
+      r = try request(url: "http://localhost:8383/api/login", method: "POST",
+                          headers: ["origin": "localhost:8383"], fields: ["id": username, "password": badpass])
+      let jwt2 = r["jwt"] as? String ?? ""
+      XCTAssertNotEqual(jwt, jwt2)
+      let rock = Profile(firstName: "rock", lastName: "way", age: 18, email: "rock@mail.com")
+      let json = try JSONEncoder().encode(rock)
+      r = try request(url: "http://localhost:8383/api/update", method: "POST",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt2)"],
+                      fields: ["profile": String(data: json, encoding: .utf8) ?? ""])
+      XCTAssertEqual(r["error"] as? String ?? "", "")
+      r = try request(url: "http://localhost:8383/lost",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt2)"])
+      let p = r["profile"] as? String ?? ""
+      print("profile", p)
+      let prof = try! JSONDecoder().decode(Profile.self, from: p.data(using: .utf8)!)
+      XCTAssertEqual(prof, rock)
+      r = try request(url: "http://localhost:8383/api/drop", method: "POST",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt2)"])
+      XCTAssertEqual(r["error"] as? String ?? "", "")
+    } catch {
+      XCTFail("\(error)")
+    }
+    server.stop()
     g.wait()
+    print("http test for \(label) completed =======================")
   }
 
   func testLeak(udb: UserDatabase, label: String) {
@@ -224,6 +334,7 @@ class PerfectSSOAuthTests: XCTestCase {
       XCTFail("user deleted")
     }
     testLeak(udb: udb, label: label)
+    testHTTP(udb: udb, label: label)
   }
 
   func testPostgreSQL() {
@@ -284,7 +395,6 @@ class PerfectSSOAuthTests: XCTestCase {
     do {
       let udb = try UDBJSONFile<Profile>(directory: folder)
       testStandard(udb: udb, label: "jsonfile")
-      testHTTP(udb: udb, label: "jsonfile")
     } catch {
       XCTFail("\(error)")
     }
