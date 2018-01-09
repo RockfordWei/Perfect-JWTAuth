@@ -725,10 +725,16 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     } catch Exception.fault(let errmsg) {
       response.status = .forbidden
       response.setBody(string: "{\"\(_config.jsonerr)\":\"\(errmsg)\"}")
+      if _config.timeout > 0 {
+        sleep(_config.timeout)
+      }
     } catch {
       let errmsg = "\(error)".stringByEncodingURL
       response.status = .unauthorized
       response.setBody(string: "{\"\(_config.jsonerr)\":\"\(errmsg)\"}")
+      if _config.timeout > 0 {
+        sleep(_config.timeout)
+      }
     }
     response.setHeader(.contentType, value: "text/json")
     response.setHeader(.wwwAuthenticate, value: self.authentication())
@@ -795,6 +801,10 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     /// disable self registration, turn it on if need,
     /// for example, an invitation only membership
     public var noreg = false
+
+    /// if access denied, the filter should suspend a period of time
+    /// to protect the web server from a brutal password attack.
+    public var timeout:UInt32 = 1
   }
 
   let _man: LoginManager<Profile>

@@ -356,6 +356,66 @@ try man.update(id: username, profile: new_profile)
 try man.drop(id: username)
 ```
 
+## HTTP Server Integration
+
+Now you can use the ready `LoginManager` instance to protect your Perfect HTTP Server, take the following snippet as an example:
+
+``` swift
+
+// make a configuration for the access control 
+// - will explain the configuration detail later
+let conf = HTTPAccessControl<Profile>.Configuration()
+
+// applying the configuration to an ACS module
+let acs = HTTPAccessControl<Profile>(man, configuration: conf)
+
+// add the ACS module into the server filters
+let requestFilters: [(HTTPRequestFilter, HTTPFilterPriority)] 
+	= [(acs, HTTPFilterPriority.high)]
+	
+// take Perfect HTTP Server for example
+let server = HTTPServer()
+
+// take effect to protect all routes, login is mandatory now!
+server.setRequestFilters(requestFilters)
+```
+
+By the default ACS setting, any HTTP request towards this server will be banned with a "401 Unauthorized" if there is no `Authorization: Bear \(jwt)` token being sent.
+
+To log into the web server, post a login request (*code example below is using a pseudo client URL request function `request()` and assuming it is IO blocking, check the test script for `urlsession` examples*):
+
+``` swift
+let json = try request(url: "https://your.server/api/login", 
+	method: .POST,
+	fields: ["id": username, "password": your_secret])
+// if login successfully, the server will return a json:
+// the error should be empty if success
+// {"jwt": "please-use-this-string-to-the-session", "error":""}
+```
+
+**NOTE** 
+1. a production server should always apply HTTPS to avoid password hacking.
+2. by default, Perfect-SSO is CSRF sensitive, so please make sure the header "origin" is the same as "host".
+3. the return JWT should apply to all following url requests with such a header:
+
+``` swift
+request(url: "https://your.server/somewhere",
+	headers: [ "Authorization": "Bearer \(jwt)"])
+```
+
+Here is a list of ACS preconfigured api:
+
+Configuration Key|URI|Description|Header|Post|Return
+-----------------|---|-----------|------|-----|------
+"reg"|/api/reg|User Registration|CSRF|id, password, profile(json)|same as login()
+"login"|/api/login|User Login|CSRF|id, password|{"jwt": jwt, "error":""}
+N/A|anywhere|anywhere else|CSRF, Authorization("Bearer jwt")|--|--
+"renew"|/api/renew|Renew Token|CSRF, Authorization("Bearer jwt")|Post Method, no fields|same as login()
+"logout"|/api/logout|User Logout|CSRF, Authorization("Bearer jwt")|Post Method, no fields|--
+"modpass"|/api/modpass|Change Password|CSRF, Authorization("Bearer jwt")|password|--
+"update"|/api/update|User Profile Update|CSRF, Authorization("Bearer jwt")|profile(json)|--
+"drop"|/api/drop|Close User File|CSRF, Authorization("Bearer jwt")|Post Method, no fields|--
+
 ## Advanced LoginManager Configuration
 
 The full configuration of `LoginManager` is listed in the class definition:
