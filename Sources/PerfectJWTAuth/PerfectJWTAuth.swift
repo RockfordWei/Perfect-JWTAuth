@@ -1,3 +1,22 @@
+//
+//  PerfectJWTAuth.swift
+//  PerfectJWTAuth
+//
+//  Created by Rockford Wei on JAN/9/18.
+//	Copyright (C) 2018 PerfectlySoft, Inc.
+//
+//===----------------------------------------------------------------------===//
+//
+// This source file is part of the Perfect.org open source project
+//
+// Copyright (c) 2018 - 2019 PerfectlySoft Inc. and the Perfect project authors
+// Licensed under Apache License v2.0
+//
+// See http://perfect.org/licensing.html for license information
+//
+//===----------------------------------------------------------------------===//
+//
+
 import PerfectLib
 import PerfectCrypto
 import PerfectHTTP
@@ -231,7 +250,7 @@ public class LoginManager<Profile> where Profile: Codable {
   internal let _keyIterations: Int
   internal let _digest: Digest
   internal let _saltLength: Int
-  internal let _managerID: String
+  internal let _iss: String
   internal let _alg: JWT.Alg
   internal let _log: LogManager
   internal let _rate: RateLimiter
@@ -245,7 +264,7 @@ public class LoginManager<Profile> where Profile: Codable {
   internal let _ban: (_ ticket: String, _ expiration: time_t) throws -> Void
   internal let _isRejected: (_ ticket: String) -> Bool
   /// every instance of LoginManager has a unique manager id, in form of uuid
-  public var globalId: String { return _managerID }
+  public var issuer: String { return _iss }
 
   internal let _lock: DispatchSemaphore
 
@@ -287,6 +306,7 @@ public class LoginManager<Profile> where Profile: Codable {
   ///   - rate: a RateLimiter. Any user operations, such as access, update or token renew, will call the rate limiter first. By default it is unlimited
   ///   - pass: a login / password quality control, will call before any password updates. No password quality control by default.
   ///   - recycle: the waiting period to recycle the expired tickets, in seconds. If 0 or skipped, it will be set to 60 seconds by default
+  //    - issuer: an optional string id to sign the JWT iss, if ignored, it will use a uuid to identify itself.
   public init(cipher: Cipher = .aes_128_cbc, keyIterations: Int = 1024,
               digest: Digest = .md5, saltLength: Int = 16,
               alg: JWT.Alg = .hs256,
@@ -294,7 +314,8 @@ public class LoginManager<Profile> where Profile: Codable {
               log: LogManager? = nil,
               rate: RateLimiter? = nil,
               pass: LoginQualityControl? = nil,
-              recycle: Int = 0) {
+              recycle: Int = 0,
+              issuer: String? = nil) {
     _cipher = cipher
     _keyIterations = keyIterations
     _digest = digest
@@ -305,7 +326,11 @@ public class LoginManager<Profile> where Profile: Codable {
     } else {
       _log = StdLogger()
     }
-    _managerID = UUID().string
+    if let iss = issuer, !iss.isEmpty {
+      _iss = iss
+    } else {
+      _iss = UUID().string
+    }
     _insert = udb.insert
     _select = udb.select
     _update = udb.update
@@ -513,7 +538,7 @@ public class LoginManager<Profile> where Profile: Codable {
     guard let iss = jwt.payload["iss"] as? String else {
       throw Exception.malformed
     }
-    if iss != _managerID {
+    if iss != _iss {
       guard allowSSO else {
         throw Exception.malformed
       }
@@ -560,7 +585,7 @@ public class LoginManager<Profile> where Profile: Codable {
     let expiration = now + timeout
     let ticket =  UUID().string
     let claims:[String: Any] = [
-      "iss":_managerID, "sub": subject, "aud": u.id,
+      "iss":_iss, "sub": subject, "aud": u.id,
       "exp": expiration, "nbf": now, "iat": now, "jit": ticket
     ]
 
@@ -715,9 +740,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
       default:
         let (id, profile) = try self.access(request: request)
         response.request.scratchPad[_config.id] = id
-        if let json = try? _encoder.encode(profile) {
-          response.request.scratchPad[_config.profile] = String(data: json, encoding: .utf8)
-        }
+        response.request.scratchPad[_config.profile] = profile
         callback(.continue(request, response))
         return
       }
@@ -775,6 +798,8 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     /// jwt token definition for user id. modification is not suggested.
     public var aud = "aud"
 
+    /// jwt token definition for issuer. modification is not suggested.
+    public var iss = "iss"
 
     /// jwt token definition for json response. modification is not suggested.
     public var jwt = "jwt"
@@ -794,6 +819,12 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
 
     /// domains that are rejected all the time, even CSRF applied.
     public var blacklist: Set<String> = []
+
+    /// general switch for SSO configuration, deny foreign issuers by default.
+    public var allowSSO = false
+
+    /// valid issuers, SSO configuration
+    public var issuers: Set<String> = []
 
     /// realm name, **MUST** cusotmize
     public var realm = "perfect"
@@ -943,12 +974,28 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
       else {
         throw Exception.request
     }
-    let (_, content) = try _man.verify(token: token)
-    guard let id = content[_config.aud] as? String else {
+    let (_, content) = try _man.verify(token: token, allowSSO: _config.allowSSO)
+
+    guard let id = content[_config.aud] as? String,
+      let iss = content[_config.iss] as? String
+      else {
       throw Exception.malformed
     }
+
     let p = try _man.load(id: id)
-    return (id, p)
+
+    if iss == _man.issuer {
+      return (id, p)
+    }
+
+    if _config.allowSSO {
+      for issuer in _config.issuers {
+        if issuer == iss || iss.range(of: issuer, options: .regularExpression) != nil {
+          return (id, p)
+        }
+      }
+    }
+    throw Exception.fault("untrusted jwt issuer \(iss)")
   }
 
   internal func renew(request: HTTPRequest) throws -> String {

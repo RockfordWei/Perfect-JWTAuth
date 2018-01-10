@@ -1,6 +1,6 @@
 import XCTest
-@testable import PerfectSSOAuthTests
+@testable import PerfectJWTAuthTests
 
 XCTMain([
-    testCase(PerfectSSOAuthTests.allTests),
+    testCase(PerfectJWTAuthTests.allTests),
 ])

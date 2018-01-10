@@ -1,4 +1,4 @@
-# Perfect 单点登录认证模块
+# Perfect JWT认证模块
 
 <p align="center">
     <a href="http://perfect.org/get-involved.html" target="_blank">
@@ -47,20 +47,24 @@
 
 本项目除了 PerfectlySoft 公司团队自身之外，多数功能和建议来自 [@cheer / @Moon1102 (橘生淮南)](https://github.com/Moon1102) 和 [@neoneye (Simon Strandgaard)](https://github.com/neoneye)。在此表示感谢
 
+## 项目状态
+
+ 阿尔法测试
+
 ## 目标
 
-- 尽量独立工作，甚至不需要ORM数据库对象管理（虽然其实自带了一个迷你ORM），甚至不需要数据库，同时可以兼容大部分Perfect数据库作为驱动。
+- 尽量独立工作，甚至不需要ORM数据库对象管理（虽然其实自带了一个迷你ORM），甚至不需要数据库，同时兼容大部分Perfect数据库作为驱动。
 - 快速，轻量，简单，可配置，安全，可伸缩，线程安全。
 - 不使用会话功能：完全采用JWT，并在虚拟专用云中实现单点登录。
 
 ## 为什么要开发单点登录？
 
-功能/性能特点|SSO|LocalAuth|Turnstile
+功能/性能特点|JWTAuth|LocalAuth|Turnstile
 ------|----|---------|---------
-加密方法|AES高级加密|摘要|河豚算法
-可配置安全体系|Yes|N/A|N/A
+密码保存方法|AES高级加密|摘要|河豚算法
 密码保存安全等级|最高|低|高
 密文生成算法|快|快|非常慢
+可配置安全体系|Yes|N/A|N/A
 函数库形式|一体化集成|分散|分散
 可配置编译|Yes|N/A|N/A
 登录控制|JWT|Session|Session
@@ -106,13 +110,13 @@ PostgreSQL| Perfect PostgreSQL|export DATABASE_DRIVER=PostgreSQL
 ### Package.Swift
 
 ``` swift
-.Package(url: "https://github.com/RockfordWei/Perfect-SSO.git", 
-majorVersion: 这里填写最新版本)
+.Package(url: "https://github.com/PerfectlySoft/Perfect-JWTAuth.git", 
+majorVersion: 3)
 ```
 
 ### 导入函数库
 
-首先要导入的函数库应该是 `PerfectSSOAuth`，其次根据需要导入不同的数据库驱动：
+首先要导入的函数库应该是 `PerfectJWTAuth`，其次根据需要导入不同的数据库驱动：
 
 导入语句| 说明
 ------------|--------------
@@ -132,7 +136,7 @@ _ = PerfectCrypto.isInitialized
 
 ### 自定义用户档案数据
 
-Perfect-SSO 采用通用模板类的方式处理用户档案，这意味着您 **必须** 自行编写档案细节。
+Perfect-JWTAuth 采用通用模板类的方式处理用户档案，这意味着您 **必须** 自行编写档案细节。
 
 具体方法是，首先设计一个 `Profile: Codable` 结构，比如：
 
@@ -188,20 +192,8 @@ public protocol LogManager {
 {"id":"d7123fcf-64f2-4a6d-9179-10e8b227d39b","timestamp":"2017-12-27 12:04:03",
 "level":0,"userId":"rockywei","event":5,"message":"profile updated"},
 
-{"id":"7713e1bc-699e-4fd4-aea7-ccf337f0d4bb","timestamp":"2017-12-27 12:04:03",
-"level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
-
-{"id":"3ed0fcb7-dc70-4148-a86b-e9abc2862950","timestamp":"2017-12-27 12:04:03",
-"level":0,"userId":"rockywei","event":4,"message":"user closed"},
-
-{"id":"5f80cf7b-a902-4a66-9665-a885734d9005","timestamp":"2017-12-27 12:04:49",
-"level":0,"userId":"rockywei","event":1,"message":"user registered"},
-
 {"id":"56cde3cd-d4bf-4af3-a852-8c6c6a2f3f85","timestamp":"2017-12-27 12:04:49",
 "level":0,"userId":"rockywei","event":0,"message":"user logged"},
-
-{"id":"cb49d385-1d64-44b3-9843-f399dcfbd1ee","timestamp":"2017-12-27 12:04:49",
-"level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
 
 {"id":"00f72022-0b8e-422f-9de9-82dc6059e399","timestamp":"2017-12-27 12:04:49",
 "level":1,"userId":"rockywei","event":0,"message":"access denied"},
@@ -318,7 +310,7 @@ let (header, content) = try man.verify(token: token, logout: true)
 // 但是令牌会失效。
 ```
 
-**注意** RFC7519 标准中 JWT 是无法注销的，但是 Perfect-SSO 使用了黑名单方法来实现“注销”功能。而且只要数据库之间能够同步这个tickets表，就可以共享黑名单。
+**注意** RFC7519 标准中 JWT 是无法注销的，但是 Perfect-JWTAuth 使用了黑名单方法来实现“注销”功能。而且只要数据库之间能够同步这个tickets表，就可以共享黑名单。
 
 #### 获取用户档案
 
@@ -347,6 +339,99 @@ try man.update(id: username, profile: new_profile)
 ``` swift
 try man.drop(id: username)
 ```
+## HTTP 服务器集成
+
+现在登录管理器的实例已经可以用于保护您的服务器了，参考以下实现范例：
+
+``` swift
+
+// 配置一下http服务器，后面会讲配置细节
+let conf = HTTPAccessControl<Profile>.Configuration()
+
+// 用这个配置方案和登录管理器启动http安全认证模块
+let acs = HTTPAccessControl<Profile>(man, configuration: conf)
+
+// 将安全认证模块以高优先级请求过滤器的形式进行配置
+let requestFilters: [(HTTPRequestFilter, HTTPFilterPriority)] 
+	= [(acs, HTTPFilterPriority.high)]
+	
+// 准备http服务器实例
+let server = HTTPServer()
+
+// 向服务器追加请求过滤器，从现在开始所有路由都必须强制登录！
+server.setRequestFilters(requestFilters)
+```
+
+在这个默认配置的http安全认证模块作用下，该服务器的所有访问请求都被强制要求用户登录，用户登录后必须携带一个请求头数据`Authorization: Bear \(jwt)`，其中jwt为登录后的授信凭证，没有这个凭证则请求被直接"401 Unauthorized"拒绝访问。
+
+登录方法是使用POST调用REST API(*以下代码范例是一个URL请求虚函数`request()`，并且是假定数据同步的。请参考测试脚本以获取具体 `urlsession` 的类似使用方法*):
+
+``` swift
+let json = try request(url: "https://某域名/api/login", 
+	method: .POST,
+	fields: ["id": "你的用户名", "password": "你的密码"])
+// 登录成功后服务器应该返回一个json字符串，其中error内容应该是空的才对：
+// {"jwt": "这里应该是返回的jwt授信凭证", "error":""}
+```
+
+### 登录之后
+
+1. 生产服务器建议必须使用HTTPS安全认证协议，避免密码明文泄露。
+2. 默认情况下 Perfect-JWTAuth 是CSRF协议敏感的，因此必须确保请求头数据包含“origin”请求来源，而且内容应该和发给服务器的主机名称“host”保持一致。
+3. 单点登录配置 `config.allowSSO` 是单点登录总开关，默认为关闭，即不信任外来授信凭证。要实现单点登录，首先将该开关置真，然后将信任的凭证签发单位加入列表 `config.issuers`，比如`config.issuers.append("[a-z]+.perfect.org")` 采用了正则表达式来信任所有perfect.org主机。
+4. 返回的jwt授信凭证必须在注销之前**始终**以请求头数据之中的授权持有形式进行后续操作：
+
+``` swift
+request(url: "https://your.server/somewhere",
+	headers: [ "Authorization": "Bearer \(jwt)"])
+```
+
+以下是登录模块所使用的预配置路由清单：
+
+URI|说明|是否需要授信凭证头数据|POST字段|返回JSON
+---|-----------|------|-----|------
+/api/reg|用户注册|否|id, password, profile(json)|`{"jwt": jwt, "error":""}`
+/api/login|用户登录|否|id, password|`{"jwt": jwt, "error":""}`
+/api/renew|更新凭证|是|不需要|`{"jwt": jwt, "error":""}`
+/api/logout|用户注销|是|不需要|`{"error":""}`
+/api/modpass|需改密码|是|password|`{"error":""}`
+/api/update|修改用户档案|是|profile(json)|`{"error":""}`
+/api/drop|删除用户档案|是|N/A|`{"error":""}`
+/**|其他路由|是|--|--
+
+### 认证保护资源
+
+采用JWT登录认证管理的HTTP服务器可以在受保护的路由内直接读取当前登录用户 id 及其档案信息：
+
+``` swift
+routes.add(Route(method: .get, uri: "/a_valuable_uri", handler: {
+      request, response in
+      let ret: String
+      guard let id = response.request.scratchPad["id"] as? String,
+        let profile = response.request.scratchPad["profile"] as? Profile
+        else {
+        // 出错了，应该立刻拒绝访问
+      }
+      // 变量 id 和 profile 内容为当前用户及其档案信息
+      ...
+    }))
+```
+
+### HTTP 访问控制配置说明
+
+`HTTPAccessControl<Profile>.Configuration` 是一个兼容JSON `Codable`的结构体，主要包括三个可配置部分：
+
+1. URIs。比如，您可以重新设定默认的登录路由`/api/login`，改为`/api/v1/login`： `config.login = "/api/v1/login"`
+2. 字符串常量。本函数库通过声明字符串常量的方式保证源代码在编译阶段允许进行字符串一致性检查。虽然不建议修改这个部分的内容，但是您仍然可以参考源代码的本节详细资料。
+3. CSRF 配置说明
+
+配置条目|说明|范例|默认值
+----------------|------------|-------|-------------
+"whitelist"|用于覆盖CSRF的白名单<br>**注意** 尽量不要使用这个白名单，最好为空|config.whitelist.append("a.trusted.domain")|空集合
+"blacklist"|用于强制拒绝的黑名单，即使CSRF有效|config.blacklist.append("hackers.playground")|空集合
+"realm"|控制域名，建议自定义|config.realm = "myTerritory"|"perfect"
+"noreg"|关闭用户自我注册功能|config.noreg = true|false
+"timeout"|服务器返回401未授权消息之前等待的秒数<br>这个选项用于遏制黑客用穷举法爆破密码|config.timeout = 0 // 不等待直接拒绝|1
 
 ## 高级登录管理配置
 
@@ -362,9 +447,12 @@ public class LoginManager<Profile> where Profile: Codable {
   log: LogManager? = nil,
   rate: RateLimiter? = nil,
   pass: LoginQualityControl? = nil,
-  recycle: Int = 0)
+  recycle: Int = 0, 
+  issuer: String? = nil)
 }
 ```
+
+其中最后一个参数“issuer” 是用来识别当前登录管理器实例的id标识。如果忽略则自动用一个uuid作为实例标识。该选项对于单点登录系统来说特别有用，用于识别不同的凭证签发单位。
 
 ### 加密控制
 

@@ -1,8 +1,27 @@
+//
+//  UDBPostgreSQL.swift
+//  PerfectJWTAuth
+//
+//  Created by Rockford Wei on JAN/9/18.
+//	Copyright (C) 2018 PerfectlySoft, Inc.
+//
+//===----------------------------------------------------------------------===//
+//
+// This source file is part of the Perfect.org open source project
+//
+// Copyright (c) 2018 - 2019 PerfectlySoft Inc. and the Perfect project authors
+// Licensed under Apache License v2.0
+//
+// See http://perfect.org/licensing.html for license information
+//
+//===----------------------------------------------------------------------===//
+//
+
 import PerfectPostgreSQL
-import PerfectSSOAuth
+import PerfectJWTAuth
 import Foundation
 
-typealias Exception = PerfectSSOAuth.Exception
+typealias Exception = PerfectJWTAuth.Exception
 typealias Field = DataworkUtility.Field
 
 public class UDBPostgreSQL<Profile>: UserDatabase {

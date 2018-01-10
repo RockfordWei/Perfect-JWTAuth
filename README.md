@@ -1,4 +1,4 @@
-# Perfect Single Sign-On Authentication Module [简体中文](README.zh_CN.md)
+# Perfect JWT Based Authentication Module [简体中文](README.zh_CN.md)
 
 
 <p align="center">
@@ -52,20 +52,24 @@ This package builds with Swift Package Manager and is part of the [Perfect](http
 
 Besides the teamwork of PerfectlySoft Inc., many improvements  and features of this module are suggested / contributed by [@cheer / @Moon1102 (橘生淮南)](https://github.com/Moon1102) and [@neoneye (Simon Strandgaard)](https://github.com/neoneye).
 
+## Project Status
+
+Alpha Testing
+
 ## Objectives
 
-- Independently work without ORMs (although it includes a mini ORM actually) or even databases, while it will supports most Perfect database drivers soon.
+- Independently work without ORMs (although it includes a mini ORM actually) or even databases, while it supports most Perfect database drivers as well.
 - Fast, light-weighted, simple, configurable, secured, scalable and thread-safe.
 - Session free: a full application of JWT for the single sign-on authentication to any virtual private clouds.
 
-## Why SSO?
+## Why JWTAuth?
 
-Feature|SSO|LocalAuth|Turnstile
+Feature|JWTAuth|LocalAuth|Turnstile
 ------|----|---------|---------
-Security Method|AES|Digest|BlowFish
-Configurable Security Method|Yes|N/A|N/A
-Password Security Level|Highest|Low|High
+Password Storage|AES|Digest|BlowFish
+Password Security Level|Highest|Medium|High
 Password Shadow Generation|Fast|Fast|Very Slow
+Configurable Security Method|Yes|N/A|N/A
 Package Layout|One Piece|Scattered|Scattered
 Build Configurable|Yes|N/A|N/A
 Login Control|JWT|Session|Session
@@ -111,13 +115,13 @@ For example, `export URL_PERFECT=/private/var/perfect` will help build if instal
 ### Package.Swift
 
 ``` swift
-.Package(url: "https://github.com/RockfordWei/Perfect-SSO.git", 
-majorVersion: the_latest_release)
+.Package(url: "https://github.com/PerfectlySoft/Perfect-JWTAuth.git", 
+majorVersion: 3)
 ```
 
 ### Import
 
-The first library to import should be `PerfectSSOAuth`, then import the user database driver as need:
+The first library to import should be `PerfectJWTAuth`, then import the user database driver as need:
 
 Import| Description
 ------------|--------------
@@ -137,7 +141,7 @@ _ = PerfectCrypto.isInitialized
 
 ### Customizable Profile
 
-Perfect-SSO is a using generic template class to deal with database and user authentications, which means you **MUST** write your own user profile structure.
+Perfect-JWTAuth is a using generic template class to deal with database and user authentications, which means you **MUST** write your own user profile structure.
 
 To do this, design a `Profile: Codable` structure first, for example:
 
@@ -193,20 +197,8 @@ The default `FileLogger` can generate JSON-friendly log files by the calendar da
 {"id":"d7123fcf-64f2-4a6d-9179-10e8b227d39b","timestamp":"2017-12-27 12:04:03",
 "level":0,"userId":"rockywei","event":5,"message":"profile updated"},
 
-{"id":"7713e1bc-699e-4fd4-aea7-ccf337f0d4bb","timestamp":"2017-12-27 12:04:03",
-"level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
-
-{"id":"3ed0fcb7-dc70-4148-a86b-e9abc2862950","timestamp":"2017-12-27 12:04:03",
-"level":0,"userId":"rockywei","event":4,"message":"user closed"},
-
-{"id":"5f80cf7b-a902-4a66-9665-a885734d9005","timestamp":"2017-12-27 12:04:49",
-"level":0,"userId":"rockywei","event":1,"message":"user registered"},
-
 {"id":"56cde3cd-d4bf-4af3-a852-8c6c6a2f3f85","timestamp":"2017-12-27 12:04:49",
 "level":0,"userId":"rockywei","event":0,"message":"user logged"},
-
-{"id":"cb49d385-1d64-44b3-9843-f399dcfbd1ee","timestamp":"2017-12-27 12:04:49",
-"level":0,"userId":"rockywei","event":0,"message":"retrieving user record"},
 
 {"id":"00f72022-0b8e-422f-9de9-82dc6059e399","timestamp":"2017-12-27 12:04:49",
 "level":1,"userId":"rockywei","event":0,"message":"access denied"},
@@ -326,7 +318,7 @@ let (header, content) = try man.verify(token: token, logout: true)
 // but the token is no longer valid.
 ```
 
-**NOTE** JWT is not supposed to logout in RFC7519, however, Perfect-SSO is using a "blacklist" to ban those "logoff" tickets, which is practical and could be propagated to all sites by sharing the "blacklist" (in database, the "tickets" table).
+**NOTE** JWT is not supposed to logout in RFC7519, however, Perfect-JWTAuth is using a "blacklist" to ban those "logoff" tickets, which is practical and could be propagated to all sites by sharing the "blacklist" (in database, the "tickets" table).
 
 #### Load User Profile 
 
@@ -393,10 +385,11 @@ let json = try request(url: "https://your.server/api/login",
 // {"jwt": "please-use-this-string-to-the-session", "error":""}
 ```
 
-**NOTE** 
+### Post Login 
+
 1. a production server should always apply HTTPS to avoid password hacking.
-2. by default, Perfect-SSO is CSRF sensitive, so please make sure the header "origin" is the same as "host".
-3. the return JWT should apply to all following url requests with such a header:
+2. by default, Perfect-JWTAuth is CSRF sensitive, so please make sure the header "origin" is the same as "host".
+3. the return JWT should **always** apply to all following url requests by adding an authorization header in such a form:
 
 ``` swift
 request(url: "https://your.server/somewhere",
@@ -405,16 +398,51 @@ request(url: "https://your.server/somewhere",
 
 Here is a list of ACS preconfigured api:
 
-Configuration Key|URI|Description|Header|Post|Return
------------------|---|-----------|------|-----|------
-"reg"|/api/reg|User Registration|CSRF|id, password, profile(json)|same as login()
-"login"|/api/login|User Login|CSRF|id, password|{"jwt": jwt, "error":""}
-N/A|anywhere|anywhere else|CSRF, Authorization("Bearer jwt")|--|--
-"renew"|/api/renew|Renew Token|CSRF, Authorization("Bearer jwt")|Post Method, no fields|same as login()
-"logout"|/api/logout|User Logout|CSRF, Authorization("Bearer jwt")|Post Method, no fields|--
-"modpass"|/api/modpass|Change Password|CSRF, Authorization("Bearer jwt")|password|--
-"update"|/api/update|User Profile Update|CSRF, Authorization("Bearer jwt")|profile(json)|--
-"drop"|/api/drop|Close User File|CSRF, Authorization("Bearer jwt")|Post Method, no fields|--
+URI|Description|Authorization Header Required|Post Fields|Return JSON
+---|-----------|------|-----|------
+/api/reg|User Registration|No|id, password, profile(json)|`{"jwt": jwt, "error":""}`
+/api/login|User Login|No|id, password|`{"jwt": jwt, "error":""}`
+/api/renew|Renew Token|Yes|N/A|`{"jwt": jwt, "error":""}`
+/api/logout|User Logout|Yes|N/A|`{"error":""}`
+/api/modpass|Change Password|Yes|password|`{"error":""}`
+/api/update|User Profile Update|Yes|profile(json)|`{"error":""}`
+/api/drop|Close User File|Yes|N/A|`{"error":""}`
+/**|everywhere else|Yes|--|--
+
+### Protected Resources
+
+HTTP Servers with this JWT based authentication can directly access the user id / profile in the route handlers:
+
+``` swift
+routes.add(Route(method: .get, uri: "/a_valuable_uri", handler: {
+      request, response in
+      let ret: String
+      guard let id = response.request.scratchPad["id"] as? String,
+        let profile = response.request.scratchPad["profile"] as? Profile
+        else {
+        // something wrong, should reject this access immediately.
+      }
+      // id & profile available here
+      ...
+    }))
+```
+
+### Full Settings of HTTP Access Control
+
+`HTTPAccessControl<Profile>.Configuration` is a json `Codable` structure which contains three parts of settings:
+
+1. URIs. For example, you can set the login URI from the default `/api/login` to `/api/v1/login` by `config.login = "/api/v1/login"`
+2. String literals. Source of Perfect-JWTAuth is using these standard names to strengthen the type checking in building phase. Although it is not suggested to change this part, you can still poke it by checking the source code.
+3. SSO Settings. `config.allowSSO` is a general switch to enable Single Sign-On, which is disabled by default. To implement SSO, firstly set this option to true, then add trusted issuers into a string set `config.issuers`, for example, `config.issuers.append("[a-z]+.perfect.org")` is trying to add all hosts of perfect.org as trusted issuers by a regular expression.
+4. CSRF setting:
+
+Configuration Key|Description|Example|Default Value
+----------------|------------|-------|-------------
+"whitelist"|domains that are allowed to override CSRF<br>**CAUTION** LEAVE IT AS BLANK AS POSSIBLE|config.whitelist.append("a.trusted.domain")|empty
+"blacklist"|domains that are rejected all the time, even CSRF applied.|config.blacklist.append("hackers.playground")|empty
+"realm"|realm name, suggested to customize|config.realm = "myTerritory"|"perfect"
+"noreg"|disable self registration,<br>turn it on if need|config.noreg = true|false
+"timeout"|seconds to wait before sending 401 unauthorized,<br>essential for anti brutal password crack|config.timeout = 0 // disabled|1
 
 ## Advanced LoginManager Configuration
 
@@ -430,9 +458,12 @@ public class LoginManager<Profile> where Profile: Codable {
   log: LogManager? = nil,
   rate: RateLimiter? = nil,
   pass: LoginQualityControl? = nil,
-  recycle: Int = 0)
+  recycle: Int = 0, 
+  issuer: String? = nil)
 }
 ```
+
+The last parameter "issuer" is the identification of this LoginManager instance. If nil by default, it will automatically assign a uuid to itself. This option is useful in Single Sign-On applications to identify and trust foreign token issuers.
 
 ### Encryption Control
 
