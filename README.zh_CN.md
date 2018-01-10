@@ -110,7 +110,7 @@ PostgreSQL| Perfect PostgreSQL|export DATABASE_DRIVER=PostgreSQL
 ### Package.Swift
 
 ``` swift
-.Package(url: "https://github.com/PerfectlySoft/Perfect-JWTAuth.git", 
+.Package(url: "https://github.com/RockfordWei/Perfect-JWTAuth.git", 
 majorVersion: 3)
 ```
 

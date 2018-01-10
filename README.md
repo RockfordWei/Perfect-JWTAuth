@@ -115,7 +115,7 @@ For example, `export URL_PERFECT=/private/var/perfect` will help build if instal
 ### Package.Swift
 
 ``` swift
-.Package(url: "https://github.com/PerfectlySoft/Perfect-JWTAuth.git", 
+.Package(url: "https://github.com/RockfordWei/Perfect-JWTAuth.git", 
 majorVersion: 3)
 ```
 
