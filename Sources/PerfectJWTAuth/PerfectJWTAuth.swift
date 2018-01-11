@@ -738,9 +738,10 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
         try self.drop(request: request)
         break
       default:
-        let (id, profile) = try self.access(request: request)
+        let (id, profile, header) = try self.access(request: request)
         response.request.scratchPad[_config.id] = id
         response.request.scratchPad[_config.profile] = profile
+        response.request.scratchPad[_config.payload] = header
         callback(.continue(request, response))
         return
       }
@@ -809,6 +810,9 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
 
     /// user profile, as a json string
     public var profile = "profile"
+
+    /// token payload. modification is not suggested
+    public var payload = "payload"
 
     /// keyword reserved for "error". modification is not suggested
     public var jsonerr = "error"
@@ -909,8 +913,14 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
       else {
         throw Exception.request
     }
+    var headers: [String: Any] = [:]
+    if let payload = request.param(name: _config.payload),
+      let json = try? payload.jsonDecode() as? [String:Any] {
+      headers = json ?? [:]
+    }
+
     try _man.register(id: id, password: password, profile: try profile(of: json))
-    return try login(id: id, password: password)
+    return try login(id: id, password: password, extra: headers)
   }
 
   internal func login(request: HTTPRequest) throws -> String {
@@ -921,11 +931,17 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
       else {
         throw Exception.request
     }
-    return try login(id: id, password: password)
+    var headers: [String: Any] = [:]
+    if let payload = request.param(name: _config.payload),
+      let json = payload.stringByDecodingURL,
+      let dic = try? json.jsonDecode() as? [String:Any] {
+      headers = dic ?? [:]
+    }
+    return try login(id: id, password: password, extra: headers)
   }
 
-  internal func login(id: String, password: String) throws -> String {
-    return try _man.login(id: id, password: password)
+  internal func login(id: String, password: String, extra: [String:Any] = [:]) throws -> String {
+    return try _man.login(id: id, password: password, headers: extra)
   }
 
 
@@ -969,12 +985,17 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     try _man.update(id: id, password: newpass)
   }
 
-  internal func access(request: HTTPRequest) throws -> (String,Profile) {
+  internal func access(request: HTTPRequest) throws -> (String,Profile,[String:Any]) {
     guard let token = jwt(of: request)
       else {
         throw Exception.request
     }
-    let (_, content) = try _man.verify(token: token, allowSSO: _config.allowSSO)
+    let (header, content) = try _man.verify(token: token, allowSSO: _config.allowSSO)
+
+    // filter out internal headers, unfortunately Swift 4 doesn't support dictionary filter :-p
+    var h = header
+    h.removeValue(forKey: "alg")
+    h.removeValue(forKey: "typ")
 
     guard let id = content[_config.aud] as? String,
       let iss = content[_config.iss] as? String
@@ -985,13 +1006,13 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
     let p = try _man.load(id: id)
 
     if iss == _man.issuer {
-      return (id, p)
+      return (id, p, h)
     }
 
     if _config.allowSSO {
       for issuer in _config.issuers {
         if issuer == iss || iss.range(of: issuer, options: .regularExpression) != nil {
-          return (id, p)
+          return (id, p, h)
         }
       }
     }

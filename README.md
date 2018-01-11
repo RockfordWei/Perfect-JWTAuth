@@ -400,14 +400,19 @@ Here is a list of ACS preconfigured api:
 
 URI|Description|Authorization Header Required|Post Fields|Return JSON
 ---|-----------|------|-----|------
-/api/reg|User Registration|No|id, password, profile(json)|`{"jwt": jwt, "error":""}`
-/api/login|User Login|No|id, password|`{"jwt": jwt, "error":""}`
+/api/reg|User Registration|No|id, password, profile(json), payload(json)|`{"jwt": jwt, "error":""}`
+/api/login|User Login|No|id, password, payload(json)|`{"jwt": jwt, "error":""}`
 /api/renew|Renew Token|Yes|N/A|`{"jwt": jwt, "error":""}`
 /api/logout|User Logout|Yes|N/A|`{"error":""}`
 /api/modpass|Change Password|Yes|password|`{"error":""}`
 /api/update|User Profile Update|Yes|profile(json)|`{"error":""}`
 /api/drop|Close User File|Yes|N/A|`{"error":""}`
 /**|everywhere else|Yes|--|--
+
+**POST FIELDS**
+1. The post field "id" and "password" is the plain text for login, so that's why HTTPS is always essential.
+2. The post field "profile" is a url encoded JSON expression and should keep the consistency with the previously defined `Profile` structure.
+3. The post field "payload" is also a url encoded JSON expression but only cached in this login session, which will not be written into the database as "profile" does.
 
 ### Protected Resources
 
@@ -418,11 +423,13 @@ routes.add(Route(method: .get, uri: "/a_valuable_uri", handler: {
       request, response in
       let ret: String
       guard let id = response.request.scratchPad["id"] as? String,
-        let profile = response.request.scratchPad["profile"] as? Profile
+        let profile = response.request.scratchPad["profile"] as? Profile,
+        let payload = response.request.scratchPad["payload"] as? [String:Any]
         else {
         // something wrong, should reject this access immediately.
       }
-      // id & profile available here
+      // id & profile available here, 
+      // and the payload is coming from the login / registration
       ...
     }))
 ```

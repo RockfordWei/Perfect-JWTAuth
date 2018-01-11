@@ -390,14 +390,19 @@ request(url: "https://your.server/somewhere",
 
 URI|说明|是否需要授信凭证头数据|POST字段|返回JSON
 ---|-----------|------|-----|------
-/api/reg|用户注册|否|id, password, profile(json)|`{"jwt": jwt, "error":""}`
-/api/login|用户登录|否|id, password|`{"jwt": jwt, "error":""}`
+/api/reg|用户注册|否|id, password, profile(json), payload(json|`{"jwt": jwt, "error":""}`
+/api/login|用户登录|否|id, password, payload(json|`{"jwt": jwt, "error":""}`
 /api/renew|更新凭证|是|不需要|`{"jwt": jwt, "error":""}`
 /api/logout|用户注销|是|不需要|`{"error":""}`
 /api/modpass|需改密码|是|password|`{"error":""}`
 /api/update|修改用户档案|是|profile(json)|`{"error":""}`
 /api/drop|删除用户档案|是|N/A|`{"error":""}`
 /**|其他路由|是|--|--
+
+**POST 字段说明**
+1. 字段"id"和"password"是用于登录的明文，所以必须要使用HTTPS
+2. 字段"profile"是经过url编码的json表达式，所以一定要和之前定义的Profile结构保持一致
+3. 字段"payload"也是一个经过url编码的json表达式，但是只在当前login会话中有效，不会保存到数据库。
 
 ### 认证保护资源
 
@@ -408,11 +413,13 @@ routes.add(Route(method: .get, uri: "/a_valuable_uri", handler: {
       request, response in
       let ret: String
       guard let id = response.request.scratchPad["id"] as? String,
-        let profile = response.request.scratchPad["profile"] as? Profile
+        let profile = response.request.scratchPad["profile"] as? Profile,
+        let payload = response.request.scratchPad["payload"] as? [String:Any]
         else {
         // 出错了，应该立刻拒绝访问
       }
-      // 变量 id 和 profile 内容为当前用户及其档案信息
+      // 变量 id 和 profile 内容为当前用户及其档案信息（来自数据库）
+      // 而 payload 则来自登录时的post预制（与数据库无关）
       ...
     }))
 ```

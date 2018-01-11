@@ -140,9 +140,11 @@ class PerfectJWTAuthTests: XCTestCase {
       let ret: String
       if let id = response.request.scratchPad["id"] as? String,
         let profile = response.request.scratchPad["profile"] as? Profile,
+        let payload = response.request.scratchPad["payload"] as? [String:Any],
         let json = try? JSONEncoder().encode(profile),
-        let prof = String(data: json, encoding: .utf8) {
-        ret = "{\"error\": \"\", \"id\": \"\(id)\", \"profile\": \"\(prof.stringByEncodingURL)\"}"
+        let prof = String(data: json, encoding: .utf8),
+        let dic = try? payload.jsonEncodedString() {
+        ret = "{\"error\": \"\", \"id\": \"\(id)\", \"profile\": \"\(prof.stringByEncodingURL)\", \"payload\":\"\(dic.stringByEncodingURL)\"}"
       } else {
         ret = "{\"error\": \"scratchPad fault\"}"
       }
@@ -213,9 +215,18 @@ class PerfectJWTAuthTests: XCTestCase {
       XCTFail("\(error)")
     }
     do {
+      let foobar = ((try? ["foo":"bar"].jsonEncodedString()) ?? "").stringByEncodingURL
       var r = try request(url: "http://localhost:8383/api/login", method: "POST",
-                      headers: ["origin": "localhost:8383"], fields: ["id": username, "password": godpass])
+                      headers: ["origin": "localhost:8383"],
+                      fields: ["id": username, "password": godpass, "payload": foobar])
       jwt = r["jwt"] as? String ?? ""
+      r = try request(url: "http://localhost:8383/lost",
+                      headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt)"])
+      let payload = r["payload"] as? String ?? ""
+      let dic = try (payload.stringByDecodingURL ?? "").jsonDecode() as? [String: Any]
+      print("payload returned", dic ?? [:])
+      let foo = (dic ?? [:])["foo"] as? String ?? "fault"
+      XCTAssertEqual(foo, "bar")
       r = try request(url: "http://localhost:8383/api/modpass", method: "POST",
                       headers: ["origin":"localhost:8383", "Authorization": "Bearer \(jwt)"],
                       fields: ["password": badpass])
