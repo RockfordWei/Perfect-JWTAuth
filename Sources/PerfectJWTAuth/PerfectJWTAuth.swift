@@ -269,31 +269,21 @@ public class LoginManager<Profile> where Profile: Codable {
   internal let _lock: DispatchSemaphore
 
   /// encrypt the password into a "shadow" string by the salt.
-  /// The workflow is:
-  /// 1. generate a SHA 384 digest from the salt
-  /// 2. get the first 32 bytes of the digest as the key of encryption
-  /// 3. get the following 16 bytes of the digest as the vector of encryption
-  /// 4. use these key and vector to encrypt the password into a "shadow"
-  /// 5. save the shadow into a base64 string
   /// - parameter password: the password to storage
   /// - parameter salt: a random string to encrypt, should be saved together
-  /// - returns: a base64 string, if success
+  /// - returns: a CMS key, if success
   /// - throws: Exception.
   fileprivate func shadow(_ password: String, salt: String) throws -> String? {
-    guard let hashData = salt.digest(.sha384) else {
-      throw Exception.digestion
-    }
-    let hashKeyData:[UInt8] = hashData[0..<32].map {$0}
-    let ivData:[UInt8] = hashData[32..<48].map {$0}
-    let data:[UInt8] = password.utf8.map { $0 }
-    guard let x = data.encrypt(self._cipher, key: hashKeyData, iv: ivData),
-      let y = x.encode(.base64)
-      else {
-        throw Exception.encryption
-    }
-    return String(validatingUTF8: y)
+    return password.encrypt(self._cipher, password: password, salt: salt)
   }
 
+  fileprivate func match(_ attempt: String, salt: String, shadow: String) throws {
+    guard let password = shadow.decrypt(self._cipher, password: attempt, salt: salt),
+      password == attempt else {
+        throw Exception.access
+    }
+  }
+  
   /// constructor of a Login Manager
   /// - parameters:
   ///   - cipher: a cipher algorithm to do the password encryption. AES_128_CBC by default.
@@ -484,13 +474,12 @@ public class LoginManager<Profile> where Profile: Codable {
       _lock.signal()
       throw error
     }
-    guard
-      let shadow = try self.shadow(password, salt: u.salt),
-      shadow == u.shadow
-      else {
+    do {
+      try match(password, salt: u.salt, shadow: u.shadow)
+    } catch (let err) {
         _log.report(id, level: .warning, event: .login,
-                    message: "access denied")
-        throw Exception.access
+                    message: err.localizedDescription)
+        throw err
     }
     return try self.renew(u: u, subject: subject, timeout: timeout, headers: headers)
   }
