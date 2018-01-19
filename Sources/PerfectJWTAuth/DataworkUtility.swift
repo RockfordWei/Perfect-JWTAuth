@@ -121,6 +121,11 @@ public class FileLogger: LogManager {
   internal let _gmt: Bool
   internal let encoder: JSONEncoder
 
+  internal var cache = Data()
+
+  /// size to cache the log before flushing
+  public static let cacheSize = 65536
+
   /// constructor
   /// - parameters:
   ///   - path: a local folder to store the log file. **NOTE** the log files will be access.`\(date)`.log under the folder.
@@ -141,7 +146,6 @@ public class FileLogger: LogManager {
   ///   - message: an extra text message for this event, could be nil
   public func report(_ userId: String, level: LogLevel = .event, event: LoginManagementEvent, message: String? = nil) {
     let t = StdLogger.timestamp(self._gmt)
-    let fileName = "\(_path)/access.\(t.0).log"
     var r = LogRecord()
     r.id = UUID().string
     r.userId = userId
@@ -151,15 +155,23 @@ public class FileLogger: LogManager {
     if let msg = message {
       r.message = msg
     }
+    guard let data = try? encoder.encode(r) else {
+      return
+    }
+    self.cache.append(data)
+    self.cache.append(contentsOf: ",\n".utf8)
+    guard self.cache.count > FileLogger.cacheSize else {
+      return
+    }
+    let fileName = "\(_path)/access.\(t.0).log"
     _lock.doWithLock {
       do {
         let f = File(fileName)
         try f.open(.append)
-        let data = try encoder.encode(r)
-        if let content = String(data: data, encoding: .utf8) {
-          try f.write(string: content + ",\n")
-          f.close()
-        }
+        let bytes:[UInt8] = self.cache.map { $0 }
+        try f.write(bytes: bytes)
+        f.close()
+        self.cache.removeAll()
       } catch {
         print("unable to log \(r)")
       }
@@ -206,7 +218,7 @@ public final class DataworkUtility {
   /// - throws: Exception
   public static func explainProperties<Profile: Codable>(of: Profile) throws -> [Field] {
     let data = try encoder.encode(of)
-    guard let json = String.init(bytes: data, encoding: .utf8),
+    guard let json = String(bytes: data, encoding: .utf8),
       let payload = try json.jsonDecode() as? [String:Any]
       else {
         throw Exception.json

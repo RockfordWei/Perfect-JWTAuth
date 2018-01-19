@@ -188,7 +188,7 @@ public class UDBMariaDB<Profile>: UserDatabase {
     }
     let properties:[String] = fields.map { $0.name }
     let columns = ["id", "salt", "shadow"] + properties
-    let qmarks:[String] = Array.init(repeating: "?", count: columns.count)
+    let qmarks:[String] = Array(repeating: "?", count: columns.count)
     let col = columns.joined(separator: ",")
     let que = qmarks.joined(separator: ",")
     let sql = "INSERT INTO users (\(col)) VALUES(\(que))"

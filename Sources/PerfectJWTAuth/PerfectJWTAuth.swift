@@ -848,7 +848,7 @@ public class HTTPAccessControl<Profile>: HTTPRequestFilter where Profile:Codable
 
   internal func profile(of: String) throws -> Profile {
     let bytes: [UInt8] = of.utf8.map { $0 }
-    let data = Data.init(bytes: bytes)
+    let data = Data(bytes: bytes)
     return try _decoder.decode(Profile.self, from: data)
   }
 
