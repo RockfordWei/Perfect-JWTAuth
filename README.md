@@ -1,3 +1,12 @@
+#⚠️IMPORTANT NOTE⚠️
+
+THIS EXPERIMENTAL IS NOT LONGER SUPPORT AS A BETTER PERFECT JWT AUTH CANDIDATE IS IN DEVELOPING.
+
+请注意本函数库已经停止技术支持，因为新的Perfect JWT认证管理系统正在开发中。
+
+PLEASE FOLLOW [Kyle Jessup(The Primary Perfect Author)'s SAuthLib](https://github.com/kjessup/SAuthLib/blob/master/Sources/SAuthLib/SAuth.swift) FOR MORE INFORMATION.
+
+
 # Perfect JWT Based Authentication Module [简体中文](README.zh_CN.md)
 
 
